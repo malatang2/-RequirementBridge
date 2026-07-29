@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2640" height="1640" viewBox="0 0 2640 1640" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif">
+<rect x="0" y="0" width="2640" height="1640" fill="#FFFFFF"/>
+<text x="1320" y="58" text-anchor="middle" font-size="46" font-weight="700" fill="#0f172a">RequirementBridge（需求桥）· AS-IS  vs  TO-BE  并排对比</text>
+<text x="1320" y="98" text-anchor="middle" font-size="24" fill="#64748b">会议决策 → 结构化需求 → 可执行技术需求（API 草稿）　|　白底 · 高清</text>
+<rect x="50" y="140" width="220" height="80" rx="12" fill="#475569"/>
+<text x="160" y="192" text-anchor="middle" font-size="32" font-weight="700" fill="#ffffff">阶段</text>
+<rect x="284" y="140" width="700" height="80" rx="12" fill="#B91C1C"/>
+<text x="634" y="192" text-anchor="middle" font-size="32" font-weight="700" fill="#ffffff">AS-IS 现状</text>
+<rect x="998" y="140" width="880" height="80" rx="12" fill="#1D4ED8"/>
+<text x="1438" y="192" text-anchor="middle" font-size="32" font-weight="700" fill="#ffffff">TO-BE 目标</text>
+<rect x="1892" y="140" width="678" height="80" rx="12" fill="#15803D"/>
+<text x="2231" y="192" text-anchor="middle" font-size="32" font-weight="700" fill="#ffffff">优化要点</text>
+<line x1="991" y1="130" x2="991" y2="1510" stroke="#0f172a" stroke-width="2" stroke-dasharray="6 6" opacity="0.35"/>
+<rect x="50" y="252" width="220" height="237.2" rx="14" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.5"/>
+<rect x="50" y="252" width="7" height="237.2" rx="3" fill="#94A3B8"/>
+<text x="160" y="381.6" text-anchor="middle" font-size="30" font-weight="700" fill="#0f172a">① 采集</text>
+<rect x="284" y="252" width="700" height="237.2" rx="14" fill="#FEF2F2" stroke="#F87171" stroke-width="1.5"/>
+<rect x="284" y="252" width="7" height="237.2" rx="3" fill="#F87171"/>
+<text x="308" y="335.6" font-size="30" font-weight="700" fill="#7f1d1d">人｜全程承担</text>
+<text x="308" y="366.6" font-size="27" font-weight="400" fill="#7f1d1d">录音 · 手写笔记</text>
+<text x="308" y="409.6" font-size="27" font-weight="400" fill="#7f1d1d">粘贴多渠道反馈</text>
+<rect x="998" y="252" width="880" height="237.2" rx="14" fill="#EFF6FF" stroke="#60A5FA" stroke-width="1.5"/>
+<rect x="998" y="252" width="7" height="237.2" rx="3" fill="#2563EB"/>
+<text x="1022" y="357.1" font-size="30" font-weight="700" fill="#1e3a8a">人｜上传音频 · 粘贴文本/反馈</text>
+<text x="1022" y="388.1" font-size="27" font-weight="400" fill="#1e3a8a">统一采集入口</text>
+<rect x="1892" y="252" width="678" height="237.2" rx="14" fill="#F0FDF4" stroke="#4ADE80" stroke-width="1.5"/>
+<rect x="1892" y="252" width="7" height="237.2" rx="3" fill="#16A34A"/>
+<text x="1916" y="349.1" font-size="27" font-weight="400" fill="#14532d">统一采集入口</text>
+<rect x="50" y="505.2" width="220" height="237.2" rx="14" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.5"/>
+<rect x="50" y="505.2" width="7" height="237.2" rx="3" fill="#94A3B8"/>
+<text x="160" y="634.8" text-anchor="middle" font-size="30" font-weight="700" fill="#0f172a">② 整理</text>
+<rect x="284" y="505.2" width="700" height="237.2" rx="14" fill="#FEF2F2" stroke="#F87171" stroke-width="1.5"/>
+<rect x="284" y="505.2" width="7" height="237.2" rx="3" fill="#F87171"/>
+<text x="308" y="610.3" font-size="30" font-weight="700" fill="#7f1d1d">人｜人工听写 / 逐条阅读</text>
+<text x="308" y="641.3" font-size="27" font-weight="700" fill="#B91C1C">⚠️ 耗时 · 易错</text>
+<rect x="998" y="505.2" width="880" height="237.2" rx="14" fill="#EFF6FF" stroke="#60A5FA" stroke-width="1.5"/>
+<rect x="998" y="505.2" width="7" height="237.2" rx="3" fill="#2563EB"/>
+<text x="1022" y="610.3" font-size="30" font-weight="700" fill="#1e3a8a">AI｜Whisper 转录</text>
+<text x="1022" y="641.3" font-size="27" font-weight="400" fill="#1e3a8a">人｜校对转录文本</text>
+<rect x="1892" y="505.2" width="678" height="237.2" rx="14" fill="#F0FDF4" stroke="#4ADE80" stroke-width="1.5"/>
+<rect x="1892" y="505.2" width="7" height="237.2" rx="3" fill="#16A34A"/>
+<text x="1916" y="580.8" font-size="27" font-weight="400" fill="#14532d">转录自动化</text>
+<text x="1916" y="623.8" font-size="27" font-weight="400" fill="#14532d">省去人工听写</text>
+<rect x="50" y="758.4" width="220" height="237.2" rx="14" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.5"/>
+<rect x="50" y="758.4" width="7" height="237.2" rx="3" fill="#94A3B8"/>
+<text x="160" y="888" text-anchor="middle" font-size="30" font-weight="700" fill="#0f172a">③ 结构化</text>
+<rect x="284" y="758.4" width="700" height="237.2" rx="14" fill="#FEF2F2" stroke="#F87171" stroke-width="1.5"/>
+<rect x="284" y="758.4" width="7" height="237.2" rx="3" fill="#F87171"/>
+<text x="308" y="842" font-size="30" font-weight="700" fill="#7f1d1d">人｜主观提炼</text>
+<text x="308" y="873" font-size="27" font-weight="400" fill="#7f1d1d">决策 · 待办 · 主题</text>
+<text x="308" y="916" font-size="27" font-weight="700" fill="#B91C1C">⚠️ 易遗漏 · 不可比</text>
+<rect x="998" y="758.4" width="880" height="237.2" rx="14" fill="#EFF6FF" stroke="#60A5FA" stroke-width="1.5"/>
+<rect x="998" y="758.4" width="7" height="237.2" rx="3" fill="#2563EB"/>
+<text x="1022" y="863.5" font-size="30" font-weight="700" fill="#1e3a8a">AI｜提取决策 · 待办 · 需求</text>
+<text x="1022" y="894.5" font-size="27" font-weight="400" fill="#1e3a8a">AI｜聚类 · 情感 · 优先级</text>
+<rect x="1892" y="758.4" width="678" height="237.2" rx="14" fill="#F0FDF4" stroke="#4ADE80" stroke-width="1.5"/>
+<rect x="1892" y="758.4" width="7" height="237.2" rx="3" fill="#16A34A"/>
+<text x="1916" y="834" font-size="27" font-weight="400" fill="#14532d">结构化可追溯</text>
+<text x="1916" y="877" font-size="27" font-weight="400" fill="#14532d">带原文引用</text>
+<rect x="50" y="1011.5999999999999" width="220" height="237.2" rx="14" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.5"/>
+<rect x="50" y="1011.5999999999999" width="7" height="237.2" rx="3" fill="#94A3B8"/>
+<text x="160" y="1141.1999999999998" text-anchor="middle" font-size="30" font-weight="700" fill="#0f172a">④ 转化</text>
+<rect x="284" y="1011.5999999999999" width="700" height="237.2" rx="14" fill="#FEF2F2" stroke="#F87171" stroke-width="1.5"/>
+<rect x="284" y="1011.5999999999999" width="7" height="237.2" rx="3" fill="#F87171"/>
+<text x="308" y="1095.1999999999998" font-size="30" font-weight="700" fill="#7f1d1d">人｜写自然语言 PRD</text>
+<text x="308" y="1126.1999999999998" font-size="27" font-weight="400" fill="#7f1d1d">研发凭理解手写接口</text>
+<text x="308" y="1169.1999999999998" font-size="27" font-weight="700" fill="#B91C1C">⚠️ 口径不一</text>
+<rect x="998" y="1011.5999999999999" width="880" height="237.2" rx="14" fill="#EFF6FF" stroke="#60A5FA" stroke-width="1.5"/>
+<rect x="998" y="1011.5999999999999" width="7" height="237.2" rx="3" fill="#2563EB"/>
+<text x="1022" y="1116.6999999999998" font-size="30" font-weight="700" fill="#1e3a8a">AI｜生成 OpenAPI 草稿</text>
+<text x="1022" y="1147.6999999999998" font-size="27" font-weight="400" fill="#1e3a8a">人｜PM + 研发 评审编辑</text>
+<rect x="1892" y="1011.5999999999999" width="678" height="237.2" rx="14" fill="#F0FDF4" stroke="#4ADE80" stroke-width="1.5"/>
+<rect x="1892" y="1011.5999999999999" width="7" height="237.2" rx="3" fill="#16A34A"/>
+<text x="1916" y="1087.1999999999998" font-size="27" font-weight="400" fill="#14532d">接口前移到设计阶段</text>
+<text x="1916" y="1130.1999999999998" font-size="27" font-weight="400" fill="#14532d">减少理解偏差</text>
+<rect x="50" y="1264.8" width="220" height="237.2" rx="14" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.5"/>
+<rect x="50" y="1264.8" width="7" height="237.2" rx="3" fill="#94A3B8"/>
+<text x="160" y="1394.3999999999999" text-anchor="middle" font-size="30" font-weight="700" fill="#0f172a">⑤ 交付</text>
+<rect x="284" y="1264.8" width="700" height="237.2" rx="14" fill="#FEF2F2" stroke="#F87171" stroke-width="1.5"/>
+<rect x="284" y="1264.8" width="7" height="237.2" rx="3" fill="#F87171"/>
+<text x="308" y="1348.3999999999999" font-size="30" font-weight="700" fill="#7f1d1d">人｜联调才暴露偏差</text>
+<text x="308" y="1379.3999999999999" font-size="27" font-weight="700" fill="#B91C1C">⚠️ 后期返工</text>
+<text x="308" y="1422.3999999999999" font-size="27" font-weight="400" fill="#7f1d1d">改 PRD / 改接口</text>
+<rect x="998" y="1264.8" width="880" height="237.2" rx="14" fill="#EFF6FF" stroke="#60A5FA" stroke-width="1.5"/>
+<rect x="998" y="1264.8" width="7" height="237.2" rx="3" fill="#2563EB"/>
+<text x="1022" y="1369.8999999999999" font-size="30" font-weight="700" fill="#1e3a8a">人｜确认后导出</text>
+<text x="1022" y="1400.8999999999999" font-size="27" font-weight="400" fill="#1e3a8a">MD / CSV / YAML / JSON</text>
+<rect x="1892" y="1264.8" width="678" height="237.2" rx="14" fill="#F0FDF4" stroke="#4ADE80" stroke-width="1.5"/>
+<rect x="1892" y="1264.8" width="7" height="237.2" rx="3" fill="#16A34A"/>
+<text x="1916" y="1340.3999999999999" font-size="27" font-weight="400" fill="#14532d">一次确认即可交付</text>
+<text x="1916" y="1383.3999999999999" font-size="27" font-weight="400" fill="#14532d">降低返工</text>
+<rect x="50" y="1560" width="2540" height="64" rx="12" fill="#F8FAFC" stroke="#E2E8F0"/><rect x="74" y="1582" width="20" height="20" rx="4" fill="#2563EB"/><text x="104" y="1598" font-size="22" fill="#334155">人｜采集 · 校对 · 评审 · 确认交付</text><rect x="920.6666666666666" y="1582" width="20" height="20" rx="4" fill="#16A34A"/><text x="950.6666666666666" y="1598" font-size="22" fill="#334155">AI（Whisper / GPT-4o）｜转录 · 结构化 · 聚类 · 生成 API</text><rect x="1767.3333333333333" y="1582" width="20" height="20" rx="4" fill="#64748b"/><text x="1797.3333333333333" y="1598" font-size="22" fill="#334155">企业系统｜Supabase · OpenAI · PostHog / GA</text>
+</svg>

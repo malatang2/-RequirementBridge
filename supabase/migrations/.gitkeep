@@ -1,0 +1,4 @@
+# 评测集目录（Golden Set）——对应《开发工作流规范 §4.1》
+# 每模块一份固定评测集，用于 AI 产出质量门禁：
+#   meeting_eval.json / api_eval.json / feedback_eval.json
+# T0 期间为占位，Day 6 评测时填充。

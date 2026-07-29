@@ -1,0 +1,32 @@
+%%%% AS-IS 现状：三泳道 × 五阶段，Agent 缺位、人全程承担
+flowchart LR
+    subgraph L1 ["👤 人（PM / 研发）—— 全程承担，易出错"]
+        direction TB
+        h1["① 采集<br/>录音 · 手写笔记 · 粘贴反馈"]
+        h2["② 整理 ⚠️<br/>人工听写 / 逐条阅读"]
+        h3["③ 结构化 ⚠️<br/>人工提炼决策·待办·主题"]
+        h4["④ 转化 ⚠️<br/>写自然语言 PRD · 凭理解手写接口"]
+        h5["⑤ 交付 ⚠️<br/>联调才暴露偏差 → 返工"]
+        h1 --> h2 --> h3 --> h4 --> h5
+    end
+
+    subgraph L2 ["🤖 Agent —— 缺位"]
+        x1["❌ 无 AI 辅助<br/>结构化与生成全靠人"]
+    end
+
+    subgraph L3 ["🗄️ 工具 —— 分散"]
+        direction TB
+        s1["邮件 · 网盘 · Excel"]
+        s2["项目管理工具<br/>（手动录入）"]
+    end
+
+    h2 -. 录入 .-> s1
+    h3 -. 录入 .-> s2
+    h4 -. 录入 .-> s2
+
+    classDef human fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:1.5px;
+    classDef agentNo fill:#f3f4f6,stroke:#9ca3af,color:#6b7280,stroke-dasharray:4 4;
+    classDef sys fill:#f8fafc,stroke:#64748b,color:#334155;
+    class h1,h2,h3,h4,h5 human;
+    class x1 agentNo;
+    class s1,s2 sys;

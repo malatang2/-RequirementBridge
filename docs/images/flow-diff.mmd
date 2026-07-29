@@ -1,0 +1,30 @@
+%%%% 优化项对照：每个 AS-IS 痛点 → 对应 TO-BE 解法
+flowchart LR
+    subgraph BEFORE ["AS-IS 痛点"]
+        direction TB
+        p1["决策 / 待办<br/>主观遗漏"]
+        p2["待办常无负责人"]
+        p3["接口理解偏差<br/>后期才返工"]
+        p4["反馈聚类主观<br/>不可比"]
+        p5["三环节割裂<br/>人工搬运"]
+    end
+
+    subgraph AFTER ["TO-BE 优化"]
+        direction TB
+        s1["✅ AI 结构化提取<br/>+ 原文引用可追溯"]
+        s2["✅ 自动识别 assignee<br/>缺失则标待分配"]
+        s3["✅ OpenAPI 草稿<br/>前移到设计阶段"]
+        s4["✅ 自动聚类 · 频次<br/>· 情感 · 优先级"]
+        s5["✅ 反馈 → 需求草稿<br/>回灌主链路"]
+    end
+
+    p1 --> s1
+    p2 --> s2
+    p3 --> s3
+    p4 --> s4
+    p5 --> s5
+
+    classDef prob fill:#fee2e2,stroke:#dc2626,color:#7f1d1d;
+    classDef sol fill:#dcfce7,stroke:#16a34a,color:#14532d;
+    class p1,p2,p3,p4,p5 prob;
+    class s1,s2,s3,s4,s5 sol;

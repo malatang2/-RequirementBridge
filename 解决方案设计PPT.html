@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>需求桥 RequirementBridge · 解决方案设计</title>
+<style>
+  :root{
+    --bg:#0f172a; --bg2:#1e293b; --ink:#f8fafc; --muted:#94a3b8;
+    --brand:#38bdf8; --brand2:#0ea5e9; --brand-deep:#0369a1;
+    --green:#34d399; --amber:#fbbf24; --rose:#fb7185; --violet:#a78bfa;
+    --card:#1e293b; --line:#334155;
+    --human:#38bdf8; --agent:#34d399; --sys:#94a3b8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    overflow:hidden;-webkit-font-smoothing:antialiased}
+  .deck{position:relative;width:100vw;height:100vh;overflow:hidden}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+    padding:46px 64px 70px;animation:fade .45s ease}
+  .slide.active{display:flex}
+  @keyframes fade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  /* header */
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:15px;letter-spacing:.5px}
+  .brand .logo{width:34px;height:34px;border-radius:9px;
+    background:linear-gradient(135deg,var(--brand),var(--brand-deep));
+    display:flex;align-items:center;justify-content:center;font-size:18px}
+  .pagemark{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+  .crumb{display:inline-flex;align-items:center;gap:8px;
+    font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--brand);
+    font-weight:700;margin-bottom:10px}
+  .crumb::before{content:"";width:26px;height:2px;background:var(--brand);border-radius:2px}
+  .title{font-size:34px;font-weight:800;line-height:1.2;margin-bottom:6px;letter-spacing:-.5px}
+  .subtitle{color:var(--muted);font-size:15px;margin-bottom:22px;max-width:90%}
+  .body{flex:1;display:flex;flex-direction:column;min-height:0}
+
+  /* cards / grid */
+  .grid{display:grid;gap:16px;width:100%}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .card h3{font-size:15px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .card p,.card li{color:#cbd5e1;font-size:13px;line-height:1.65}
+  .card .ico{width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;
+    justify-content:center;font-size:15px;flex-shrink:0}
+
+  /* pills & tags */
+  .tag{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;
+    font-size:11px;font-weight:600;border:1px solid var(--line);background:rgba(56,189,248,.08);color:var(--brand)}
+  .tag.g{background:rgba(52,211,153,.1);color:var(--green);border-color:rgba(52,211,153,.3)}
+  .tag.r{background:rgba(251,113,133,.1);color:var(--rose);border-color:rgba(251,113,133,.3)}
+  .tag.a{background:rgba(251,191,36,.1);color:var(--amber);border-color:rgba(251,191,36,.3)}
+
+  ul.clean{list-style:none;display:flex;flex-direction:column;gap:7px}
+  ul.clean li{padding-left:18px;position:relative}
+  ul.clean li::before{content:"";position:absolute;left:0;top:9px;width:6px;height:6px;
+    border-radius:50%;background:var(--brand)}
+  ul.clean li.no::before{background:var(--rose)}
+  ul.clean li.yes::before{background:var(--green)}
+
+  /* flow */
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+  .flow .step{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;padding:14px;position:relative}
+  .flow .arrow{display:flex;align-items:center;justify-content:center;width:30px;
+    color:var(--brand);font-size:20px;flex-shrink:0}
+  .flow .step .h{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;margin-bottom:6px}
+  .flow .step .d{font-size:12px;color:var(--muted);line-height:1.5}
+
+  /* stat */
+  .stat{text-align:center;padding:16px}
+  .stat .n{font-size:30px;font-weight:800;color:var(--brand);line-height:1}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:6px}
+
+  table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.tbl th,table.tbl td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  table.tbl th{color:var(--brand);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px}
+  table.tbl tr:last-child td{border-bottom:none}
+  table.tbl td .sub{color:var(--muted);font-size:11px}
+
+  /* nav */
+  .nav{position:fixed;bottom:0;left:0;right:0;height:50px;display:flex;align-items:center;
+    justify-content:center;gap:14px;background:rgba(15,23,42,.85);backdrop-filter:blur(8px);
+    border-top:1px solid var(--line);z-index:50;padding:0 20px}
+  .nav button{background:var(--bg2);border:1px solid var(--line);color:var(--ink);
+    width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:15px;transition:.15s}
+  .nav button:hover{background:var(--brand-deep);border-color:var(--brand)}
+  .nav .counter{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:64px;text-align:center}
+  .progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--brand),var(--green));z-index:60;transition:width .4s}
+
+  /* cover */
+  .cover{justify-content:center;align-items:flex-start;background:
+    radial-gradient(900px 500px at 80% 10%,rgba(56,189,248,.18),transparent),
+    radial-gradient(700px 400px at 10% 90%,rgba(52,211,153,.12),transparent),var(--bg)}
+  .cover .hero{font-size:60px;font-weight:900;letter-spacing:-1.5px;line-height:1.05;margin:18px 0 14px}
+  .cover .hero .accent{background:linear-gradient(120deg,var(--brand),var(--green));-webkit-background-clip:text;
+    background-clip:text;color:transparent}
+  .cover .lead{font-size:19px;color:#cbd5e1;max-width:760px;line-height:1.7;margin-bottom:30px}
+  .cover .meta{display:flex;gap:12px;flex-wrap:wrap}
+  .cover .biglogo{font-size:64px;margin-bottom:8px}
+
+  /* sw lane diagram */
+  .lanes{display:flex;flex-direction:column;gap:10px}
+  .lane{display:flex;align-items:stretch;gap:10px}
+  .lane-label{width:88px;flex-shrink:0;border-radius:10px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;font-size:12px;font-weight:700;padding:8px;text-align:center}
+  .lane-label.h{background:rgba(56,189,248,.15);color:var(--human);border:1px solid rgba(56,189,248,.4)}
+  .lane-label.a{background:rgba(52,211,153,.15);color:var(--agent);border:1px solid rgba(52,211,153,.4)}
+  .lane-label.s{background:rgba(148,163,184,.15);color:var(--sys);border:1px solid rgba(148,163,184,.4)}
+  .lane-flow{flex:1;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .node{padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--bg2);white-space:nowrap}
+  .node.h{border-color:rgba(56,189,248,.5);color:var(--human)}
+  .node.a{border-color:rgba(52,211,153,.5);color:var(--agent)}
+  .node.s{border-color:rgba(148,163,184,.5);color:var(--sys)}
+  .arr{color:var(--muted);font-size:14px}
+
+  .arch-layer{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:var(--card)}
+  .arch-layer .lh{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+  .arch-layer .lh .name{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:8px}
+  .arch-layer .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-size:11.5px;padding:4px 10px;border-radius:7px;background:var(--bg);border:1px solid var(--line);color:#cbd5e1}
+
+  .legend{display:flex;gap:16px;font-size:11.5px;color:var(--muted);margin-top:8px;flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+  .kpi-row{display:flex;gap:14px;margin-top:14px}
+  .kpi{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center}
+  .kpi .v{font-size:26px;font-weight:800}
+  .kpi .v.b{color:var(--brand)} .kpi .v.g{color:var(--green)} .kpi .v.a{color:var(--amber)} .kpi .v.r{color:var(--rose)}
+  .kpi .k{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4}
+
+  .footnote{font-size:11px;color:var(--muted);margin-top:auto;padding-top:10px;border-top:1px dashed var(--line)}
+  .footnote b{color:#cbd5e1}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:18px;flex:1;min-height:0}
+  .scroll{overflow:auto}
+  .scroll::-webkit-scrollbar{width:6px;height:6px}
+  .scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+
+  .seg{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .seg .s{padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;
+    border:1px solid var(--line);color:var(--muted);background:var(--bg2)}
+  .seg .s.on{background:var(--brand-deep);color:#fff;border-color:var(--brand)}
+
+  .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .col-half{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="deck" id="deck">
+
+  <!-- 1 封面 -->
+  <section class="slide cover active">
+    <div class="topbar" style="width:100%">
+      <div class="brand"><span class="logo">🌉</span> RequirementBridge · 需求桥</div>
+      <div class="pagemark">解决方案设计 · v1.0</div>
+    </div>
+    <div style="margin:auto;width:100%">
+      <div class="biglogo">🌉</div>
+      <div class="crumb">SOLUTION DESIGN · 解决方案设计</div>
+      <h1 class="hero">会议决策 → 结构化需求 →<br><span class="accent">可执行 API 草稿</span></h1>
+      <p class="lead">让 AI 一次性把<strong style="color:var(--ink)">散点式的会议决策与多渠道用户反馈</strong>，转化为结构化产品需求与技术接口——降低产研沟通成本与返工，补上"决策到执行"之间缺失的那座桥。</p>
+      <div class="meta">
+        <span class="tag">🎤 会议纪要智能结构化</span>
+        <span class="tag g">🔌 OpenAPI 草稿直出</span>
+        <span class="tag a">💬 反馈聚类洞察</span>
+        <span class="tag r">🔒 数据不出境</span>
+      </div>
+      <div class="meta" style="margin-top:22px;color:var(--muted);font-size:13px">
+        汇报对象：甲方 / 决策者　|　日期：2026-07-29　|　基线版本：CP0 冻结 v1.0
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 目录 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">目录 / 02</div>
+    </div>
+    <div class="crumb">CONTENTS · 汇报议程</div>
+    <h2 class="title">本次汇报五大议题</h2>
+    <p class="subtitle">围绕"解决什么问题、怎么用、怎么落地、风险如何管控"四条主线展开。</p>
+    <div class="body">
+      <div class="grid g2">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(56,189,248,.15);color:var(--brand)">①</span> 业务问题与项目范围</h3>
+          <ul class="clean">
+            <li>当前产研协作的四大痛点（AS-IS）</li>
+            <li>v1 做什么：三大核心模块</li>
+            <li>v1 明确不做什么：边界与取舍</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15);color:var(--green)">②</span> 核心用户流程</h3>
+          <ul class="clean">
+            <li>三模块各自的"输入 → AI → 人校对 → 导出"链路</li>
+            <li>端到端用户旅程与 AS-IS / TO-BE 改进</li>
+            <li>方案改善的关键业务环节</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(251,191,36,.15);color:var(--amber)">③</span> 系统设计</h3>
+          <ul class="clean">
+            <li>技术选型与分层架构</li>
+            <li>数据模型与系统接入方式</li>
+            <li>AI 链路与模型选型（通义千问）</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(251,113,133,.15);color:var(--rose)">④</span> 风险与人工介入</h3>
+          <ul class="clean">
+            <li>哪些环节需要人工确认</li>
+            <li>主要风险与缓解措施</li>
+            <li>交付路径与里程碑</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footnote">价值锚点：<b>"AI 真正替代了多少人工整理"</b>——会议决策不落地、反馈难聚类、需求转接口靠反复对齐，这三件事由 AI 一次性结构化。</div>
+    </div>
+  </section>
+
+  <!-- 3 业务问题 AS-IS -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">业务问题 / 03</div>
+    </div>
+    <div class="crumb">PROBLEM · 解决什么问题</div>
+    <h2 class="title">当前产研协作的四大痛点</h2>
+    <p class="subtitle">从"会议决策"到"可执行任务/接口"，链路割裂、靠人工搬运、偏差在后期才暴露。</p>
+    <div class="body">
+      <div class="grid g4">
+        <div class="card" style="border-top:3px solid var(--rose)">
+          <h3><span class="ico" style="background:rgba(251,113,133,.15)">🎤</span> 会议侧</h3>
+          <ul class="clean">
+            <li class="no">录音/笔记散落，关键决策易遗漏</li>
+            <li class="no">纪要人工整理耗时、标准不一</li>
+            <li class="no">待办负责人不明，无人跟进</li>
+          </ul>
+        </div>
+        <div class="card" style="border-top:3px solid var(--amber)">
+          <h3><span class="ico" style="background:rgba(251,191,36,.15)">🔌</span> 需求转技术侧</h3>
+          <ul class="clean">
+            <li class="no">PM 写自然语言 PRD</li>
+            <li class="no">研发凭理解手写接口</li>
+            <li class="no">偏差在联调才暴露 → 返工</li>
+          </ul>
+        </div>
+        <div class="card" style="border-top:3px solid var(--violet)">
+          <h3><span class="ico" style="background:rgba(167,139,250,.15)">💬</span> 反馈侧</h3>
+          <ul class="clean">
+            <li class="no">多渠道反馈分散，逐条阅读成本高</li>
+            <li class="no">聚类/频次/情感靠人工估算</li>
+            <li class="no">优先级主观，难横向比较</li>
+          </ul>
+        </div>
+        <div class="card" style="border-top:3px solid var(--brand)">
+          <h3><span class="ico" style="background:rgba(56,189,248,.15)">🔗</span> 横向割裂</h3>
+          <ul class="clean">
+            <li class="no">三环节彼此孤立</li>
+            <li class="no">无"会议→需求→接口"贯通链路</li>
+            <li class="no">数据需人工搬运</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px;background:rgba(251,113,133,.08);border-color:rgba(251,113,133,.3)">
+        <p style="color:#fda4af;font-size:14px"><b>⚠️ 问题本质：</b>这不是单点工具缺失，而是<b style="color:#fff">"决策 → 执行"全链路缺少结构化沉淀</b>——会议结论无法直接变成可执行需求，需求无法直接变成可对接接口，反馈无法直接变成可排序的需求池。</p>
+      </div>
+      <div class="footnote">来源：《需求说明清单 v0.1》§3 当前业务问题（AS-IS 痛点）。</div>
+    </div>
+  </section>
+
+  <!-- 4 解决方案总览 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">方案总览 / 04</div>
+    </div>
+    <div class="crumb">SOLUTION OVERVIEW · 解决思路</div>
+    <h2 class="title">一座"需求桥"，AI 一次性结构化</h2>
+    <p class="subtitle">三大模块各管一段，统一以"AI 结构化 + 人确认 + 导出"为价值闭环，v1 以单用户 + 项目为边界。</p>
+    <div class="body">
+      <div class="flow">
+        <div class="step" style="border-top:3px solid var(--human)">
+          <div class="h"><span>👤</span> 散点输入</div>
+          <div class="d">会议音频/笔记、业务需求、多渠道用户反馈——原本分散在各工具的原始素材</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--agent)">
+          <div class="h"><span>🤖</span> AI 结构化</div>
+          <div class="d">通义千问 + Paraformer：转录、提取、生成、聚类——把非结构化内容变成结构化产出</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--amber)">
+          <div class="h"><span>✏️</span> 人确认校对</div>
+          <div class="d">所有 AI 产出默认可编辑/增删/改优先级——AI 不自主写副作用，决策权在人</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--green)">
+          <div class="h"><span>📤</span> 导出落地</div>
+          <div class="d">Markdown / CSV / YAML / JSON / PNG——结构化产出外溢到团队既有流程</div>
+        </div>
+      </div>
+      <div class="grid g3" style="margin-top:20px">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(56,189,248,.15)">🎤</span> 模块一·会议纪要</h3>
+          <p>音频/文本 → 转录 + 结构化提取【决策/待办/需求/问题】，带负责人、优先级、原文引用。</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15)">🔌</span> 模块二·API 设计器</h3>
+          <p>业务需求 → 生成 OpenAPI 3.0 草稿（camelCase + 错误码 + Schemas），代码/可视化双视图。</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(167,139,250,.15)">💬</span> 模块三·反馈洞察</h3>
+          <p>多渠道反馈 → 主题聚类 + 情感 + 频次 + 优先级，一键生成需求草稿回灌主链路。</p>
+        </div>
+      </div>
+      <div class="footnote">设计原则：<b>人定方向、做确认；AI 做结构化与生成；系统做存取与上报。</b>v1 三模块相互独立，串联由人主导（手动），端到端自动流水线留 v2。</div>
+    </div>
+  </section>
+
+  <!-- 5 范围：做什么 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">项目范围 / 05</div>
+    </div>
+    <div class="crumb">IN SCOPE · 本阶段做什么</div>
+    <h2 class="title">v1 范围内：三大模块端到端走通</h2>
+    <p class="subtitle">每个模块都完成"输入 → AI 处理 → 人校对 → 落库 → 导出"全链路，且以可衡量准确度达标为验收。</p>
+    <div class="body scroll">
+      <table class="tbl">
+        <thead><tr><th style="width:16%">模块</th><th style="width:30%">核心能力</th><th style="width:30%">AI 链路</th><th>关键验收门槛</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b style="color:var(--brand)">🎤 会议纪要</b><br><span class="sub">/dashboard/meetings</span></td>
+            <td>音频(mp3/wav/m4a≤50MB)/文本输入；四类分组展示；全条目可编辑/改优先级/改负责人；摘要 + 原文引用</td>
+            <td>Paraformer 转录 → Qwen 结构化提取【决策/待办/需求/问题】</td>
+            <td>分类准确率≥80%；负责人命中率≥70%；<b style="color:var(--green)">原文引用可追溯≥90%</b></td>
+          </tr>
+          <tr>
+            <td><b style="color:var(--green)">🔌 API 设计器</b><br><span class="sub">/dashboard/api-designer</span></td>
+            <td>业务需求(+规范)输入；代码视图(高亮+编辑+实时校验)+可视化视图；版本保存/历史/重新生成</td>
+            <td>Qwen-Max 生成 OpenAPI 3.0 YAML（camelCase + 400/401/404/500 + Schemas）</td>
+            <td><b style="color:var(--green)">OpenAPI 合法率 100%</b>；错误码完整 100%；字段规范≥95%</td>
+          </tr>
+          <tr>
+            <td><b style="color:var(--violet)">💬 反馈洞察</b><br><span class="sub">/dashboard/feedback</span></td>
+            <td>粘贴/上传CSV/TXT；统计卡+条形图+情感饼图+主题卡；合并/编辑/删除；勾选主题生成需求草稿</td>
+            <td>Qwen-Plus 聚类/命名/摘要/频次/情感/优先级/样本</td>
+            <td>聚类合理度≥4/5；<b style="color:var(--green)">频次准确 100%</b>；情感一致率≥75%</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="col-half" style="margin-top:16px">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(148,163,184,.15)">🧱</span> 通用与平台</h3>
+          <ul class="clean">
+            <li>Landing / 邮箱+Google OAuth 登录</li>
+            <li>Dashboard（项目选择器 + 三模块导航）</li>
+            <li>项目 CRUD / Light·Dark / 响应式 / Toast / 表单校验</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(148,163,184,.15)">📊</span> 埋点与可观测</h3>
+          <ul class="clean">
+            <li>PostHog 自定义事件 + pageview</li>
+            <li>GA4 流量；SEO（meta/sitemap/robots）</li>
+            <li>AI 用量留痕 + 状态机落库可查</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footnote">交付目标：三模块各打通"输入→AI→展示→导出"核心链路；Day 6（2026-08-01）前各产出可演示 Demo。来源：《SOW》§2、《需求说明清单》§4。</div>
+    </div>
+  </section>
+
+  <!-- 6 范围：不做什么 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">项目范围 / 06</div>
+    </div>
+    <div class="crumb">OUT OF SCOPE · 本阶段不做什么</div>
+    <h2 class="title">v1 明确不做——边界清晰才能交付</h2>
+    <p class="subtitle">不做的是为避免范围蔓延与过度设计；每一项都有明确的"留 v2"或"默认值"处置。</p>
+    <div class="body">
+      <div class="grid g2">
+        <div class="card" style="border-left:3px solid var(--rose)">
+          <h3><span class="ico" style="background:rgba(251,113,133,.15)">🚫</span> 不做团队级多人协作</h3>
+          <p>v1 以"单用户 + 项目"为边界（Supabase RLS 限定本人数据）。不支持成员角色、共享编辑、评论 @、权限分级。</p>
+        </div>
+        <div class="card" style="border-left:3px solid var(--rose)">
+          <h3><span class="ico" style="background:rgba(251,113,133,.15)">🚫</span> 不做第三方系统实时集成</h3>
+          <p>不直连 Jira/飞书/钉钉/Linear/Swagger/Postman；产出仅通过导出文件（MD/CSV/YAML/JSON/PNG）和剪贴板外溢。</p>
+        </div>
+        <div class="card" style="border-left:3px solid var(--rose)">
+          <h3><span class="ico" style="background:rgba(251,113,133,.15)">🚫</span> 不做 API Mock/SDK/版本 Diff</h3>
+          <p>仅生成与展示 OpenAPI 定义，不提供请求调试、Mock 返回、代码生成、版本对比。版本仅保存。</p>
+        </div>
+        <div class="card" style="border-left:3px solid var(--rose)">
+          <h3><span class="ico" style="background:rgba(251,113,133,.15)">🚫</span> 不做反馈渠道直采</h3>
+          <p>不直接对接客服系统/NPS 平台/应用商店评论 API，需用户手动粘贴或上传文件。</p>
+        </div>
+        <div class="card" style="border-left:3px solid var(--rose)">
+          <h3><span class="ico" style="background:rgba(251,113,133,.15)">🚫</span> 不做 AI 自主执行</h3>
+          <p>无 Agent 自主写入外部系统。AI 仅做转录/提取/生成/聚类，所有落地动作由人确认与导出。</p>
+        </div>
+        <div class="card" style="border-left:3px solid var(--rose)">
+          <h3><span class="ico" style="background:rgba(251,113,133,.15)">🚫</span> 不做端到端自动串联流水线</h3>
+          <p>v1 三模块相互独立，不自动把"会议需求"喂给"API 设计器"。串联由人主导（手动"带入"按钮）。</p>
+        </div>
+      </div>
+      <div class="grid g3" style="margin-top:14px">
+        <div class="card" style="padding:14px"><p style="font-size:12.5px"><b style="color:var(--amber)">音视频多模态/说话人分离</b>：v1 仅语音转文本 + 文本结构化，不区分发言人。</p></div>
+        <div class="card" style="padding:14px"><p style="font-size:12.5px"><b style="color:var(--amber)">私有化/本地大模型</b>：统一走阿里云通义千问，不做本地部署。</p></div>
+        <div class="card" style="padding:14px"><p style="font-size:12.5px"><b style="color:var(--amber)">反馈增量分析</b>：v1 为一次性分析，不追加到已有任务。</p></div>
+      </div>
+      <div class="footnote">来源：《SOW》§3、《需求说明清单》§5。取舍原则：单用户价值闭环优先，团队协作/实时集成/自动化留 v2。</div>
+    </div>
+  </section>
+
+  <!-- 7 用户流程·模块一 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">用户流程 / 07</div>
+    </div>
+    <div class="crumb">USER FLOW · 模块一 会议纪要</div>
+    <h2 class="title">模块一：会议决策一键结构化</h2>
+    <p class="subtitle">改善环节：把"人工整理纪要 + 待办无人跟进"变成"AI 转录提取 + 人只做校对"。</p>
+    <div class="body">
+      <div class="flow" style="margin-bottom:16px">
+        <div class="step" style="border-top:3px solid var(--human)">
+          <div class="h"><span>1️⃣</span> 上传/粘贴</div>
+          <div class="d">PM 上传音频(mp3/wav/m4a≤50MB) 或粘贴会议笔记</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--agent)">
+          <div class="h"><span>2️⃣</span> AI 转录+提取</div>
+          <div class="d">Paraformer 转录 → Qwen 提取【决策/待办/需求/问题】+ 摘要 + 负责人/优先级/原文引用</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--amber)">
+          <div class="h"><span>3️⃣</span> 校对编辑</div>
+          <div class="d">四类分组展示；全条目可编辑/删除/改优先级/改负责人；缺失负责人标"待分配"</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--green)">
+          <div class="h"><span>4️⃣</span> 导出落地</div>
+          <div class="d">Markdown / CSV / 复制剪贴板，带入团队项目管理流程</div>
+        </div>
+      </div>
+      <div class="col-half">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(56,189,248,.15)">✨</span> 关键体验点</h3>
+          <ul class="clean">
+            <li>全程状态机进度提示：上传中→转录中→分析中→完成（失败可重试）</li>
+            <li>每条带<b>原文引用</b>，可程序化追溯（quote_offset 字符偏移）</li>
+            <li>任何编辑自动标记 is_edited，支撑"AI 采纳率/未编辑率"指标</li>
+          </ul>
+        </div>
+        <div class="card" style="background:rgba(52,211,153,.06);border-color:rgba(52,211,153,.3)">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15)">📈</span> 改善的业务环节</h3>
+          <ul class="clean">
+            <li class="yes">纪要整理：人工 → AI 一次完成</li>
+            <li class="yes">待办跟进：自带负责人/优先级，无遗漏</li>
+            <li class="yes">会议结论：直接结构化沉淀为需求</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footnote">数据落点：meetings（主表 + 状态机）+ meeting_items（结构化条目）。来源：《接口契约》§1、《UI 线框稿》§5。</div>
+    </div>
+  </section>
+
+  <!-- 8 用户流程·模块二 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">用户流程 / 08</div>
+    </div>
+    <div class="crumb">USER FLOW · 模块二 API 设计器</div>
+    <h2 class="title">模块二：业务需求直出 OpenAPI 草稿</h2>
+    <p class="subtitle">改善环节：把"产研口径不一、偏差在联调才暴露"前移到设计阶段，产研基于同一份接口定义评审。</p>
+    <div class="body">
+      <div class="flow" style="margin-bottom:16px">
+        <div class="step" style="border-top:3px solid var(--human)">
+          <div class="h"><span>1️⃣</span> 输入需求</div>
+          <div class="d">PM 写业务需求（必填）+ 团队 API 规范上下文（选填，可项目级复用）</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--agent)">
+          <div class="h"><span>2️⃣</span> AI 生成</div>
+          <div class="d">Qwen-Max 生成 OpenAPI 3.0：路径/方法/参数/响应/Schemas/认证，含 400/401/404/500</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--amber)">
+          <div class="h"><span>3️⃣</span> 双视图评审</div>
+          <div class="d">代码视图(Monaco/CodeMirror + 实时 YAML 校验) + 可视化视图(Swagger 卡片)</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--green)">
+          <div class="h"><span>4️⃣</span> 版本+导出</div>
+          <div class="d">保存版本/历史/重新生成；导出 YAML / JSON(OpenAPI) / 复制</div>
+        </div>
+      </div>
+      <div class="col-half">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15)">🛡️</span> 服务端双重校验</h3>
+          <ul class="clean">
+            <li>生成后用 swagger-parser 校验 OpenAPI 合法性，非法自动重试一次</li>
+            <li>程序化扫描 camelCase + 每 path 含四错误码，<b>不达标即缺陷</b></li>
+            <li>前端 js-yaml 语法实时校验 + 服务端权威校验双层分工</li>
+          </ul>
+        </div>
+        <div class="card" style="background:rgba(52,211,153,.06);border-color:rgba(52,211,153,.3)">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15)">📈</span> 改善的业务环节</h3>
+          <ul class="clean">
+            <li class="yes">需求→接口：自然语言 → 标准 OpenAPI，产研同源</li>
+            <li class="yes">理解偏差：从联调期前移到设计期</li>
+            <li class="yes">接口规范：统一载体，减少口头/文档反复对齐</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footnote">数据落点：api_drafts（草稿 + current_yaml）+ api_versions（版本历史）。来源：《接口契约》§2、《UI 线框稿》§6。</div>
+    </div>
+  </section>
+
+  <!-- 9 用户流程·模块三 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">用户流程 / 09</div>
+    </div>
+    <div class="crumb">USER FLOW · 模块三 反馈洞察</div>
+    <h2 class="title">模块三：反馈聚类量化，一键生成需求</h2>
+    <p class="subtitle">改善环节：把"逐条人工阅读 + 主观估算优先级"变成"AI 聚类量化 + 可追溯的优先级建议"。</p>
+    <div class="body">
+      <div class="flow" style="margin-bottom:16px">
+        <div class="step" style="border-top:3px solid var(--human)">
+          <div class="h"><span>1️⃣</span> 粘贴/上传</div>
+          <div class="d">粘贴文本(每条换行) 或上传 CSV/TXT(CSV 指定反馈列)</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--agent)">
+          <div class="h"><span>2️⃣</span> AI 聚类</div>
+          <div class="d">Qwen-Plus 主题聚类/命名/摘要/频次/情感/优先级建议/每主题 2-3 条样本</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--amber)">
+          <div class="h"><span>3️⃣</span> 洞察评估</div>
+          <div class="d">统计卡+条形图+情感饼图+主题卡；合并/编辑/删除；评估优先级选题</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--green)">
+          <div class="h"><span>4️⃣</span> 生成需求+导出</div>
+          <div class="d">勾选主题 → 生成需求草稿(可带入 API 设计器)；导出 MD/CSV/PNG</div>
+        </div>
+      </div>
+      <div class="col-half">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(167,139,250,.15)">🎯</span> 关键体验点</h3>
+          <ul class="clean">
+            <li>主题按 frequency 降序，频次由触发器严格同步（验收 100%）</li>
+            <li>每主题 2-3 条样本反馈，可追溯、可比较</li>
+            <li>需求草稿可手动"带入 API 设计器"（人主导串联，非自动）</li>
+          </ul>
+        </div>
+        <div class="card" style="background:rgba(52,211,153,.06);border-color:rgba(52,211,153,.3)">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15)">📈</span> 改善的业务环节</h3>
+          <ul class="clean">
+            <li class="yes">反馈阅读：逐条人工 → 自动聚类覆盖</li>
+            <li class="yes">优先级：主观估算 → 量化频次+情感+可追溯</li>
+            <li class="yes">反馈→需求：人工搬运 → 一键生成草稿回灌</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footnote">数据落点：feedback_analyses + feedback_items（原始）+ feedback_topics（聚类）+ requirement_drafts（衍生）。来源：《接口契约》§3、《UI 线框稿》§7。</div>
+    </div>
+  </section>
+
+  <!-- 10 端到端用户旅程 / TO-BE -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">用户旅程 / 10</div>
+    </div>
+    <div class="crumb">END-TO-END · TO-BE 目标流程</div>
+    <h2 class="title">人 / AI / 系统 三方分工</h2>
+    <p class="subtitle">端到端主链路（会议决策 → 任务/需求 → API 草稿），反馈洞察作为需求来源之一回灌。</p>
+    <div class="body">
+      <div class="lanes">
+        <div class="lane">
+          <div class="lane-label h">👤 人<br><span style="font-size:10px;font-weight:400;opacity:.7">PM/研发</span></div>
+          <div class="lane-flow">
+            <span class="node h">上传音频/粘贴文本</span><span class="arr">→</span>
+            <span class="node h">校对结构化条目</span><span class="arr">→</span>
+            <span class="node h">输入业务需求+规范</span><span class="arr">→</span>
+            <span class="node h">评审/编辑 API</span><span class="arr">→</span>
+            <span class="node h">粘贴/上传反馈</span><span class="arr">→</span>
+            <span class="node h">评估优先级·选题</span>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-label a">🤖 AI<br><span style="font-size:10px;font-weight:400;opacity:.7">千问/ASR</span></div>
+          <div class="lane-flow">
+            <span class="node a">Paraformer 转录</span><span class="arr">→</span>
+            <span class="node a">Qwen 结构化提取</span><span class="arr">→</span>
+            <span class="node a">Qwen-Max 生成 OpenAPI</span><span class="arr">→</span>
+            <span class="node a">Qwen-Plus 聚类/情感/频次</span><span class="arr">→</span>
+            <span class="node a">生成需求草稿</span>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-label s">🗄️ 系统<br><span style="font-size:10px;font-weight:400;opacity:.7">存取/上报</span></div>
+          <div class="lane-flow">
+            <span class="node s">Supabase Storage(音频/文件)</span><span class="arr">→</span>
+            <span class="node s">Postgres(11表+RLS)</span><span class="arr">→</span>
+            <span class="node s">DashScope 调用</span><span class="arr">→</span>
+            <span class="node s">导出 MD/CSV/YAML/JSON/PNG</span><span class="arr">→</span>
+            <span class="node s">PostHog + GA4 上报</span>
+          </div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--human)"></span> 人：决策与确认的唯一主体</span>
+        <span><span class="dot" style="background:var(--agent)"></span> AI：结构化/生成/聚类的"执行手"</span>
+        <span><span class="dot" style="background:var(--sys)"></span> 系统：存储/调用/上报的"管道"</span>
+      </div>
+      <div class="card" style="margin-top:14px;background:rgba(56,189,248,.06);border-color:rgba(56,189,248,.3)">
+        <p style="font-size:13px;color:#bae6fd"><b>TO-BE 关键变化：</b>会议转录+结构化由 AI 一次完成，人只做校对；API 草稿由 AI 直出，把"理解偏差"前移到设计阶段；反馈由 AI 量化聚类，优先级可追溯并可一键回灌主链路。<b style="color:#fff">落地动作仍由人确认 + 导出，AI 不直接写入外部业务系统。</b></p>
+      </div>
+      <div class="footnote">来源：《业务流程图 v0.1》§3 TO-BE 目标流程、§4 分工矩阵。</div>
+    </div>
+  </section>
+
+  <!-- 11 系统设计·技术架构 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">系统设计 / 11</div>
+    </div>
+    <div class="crumb">ARCHITECTURE · 技术选型与分层</div>
+    <h2 class="title">分层架构：前端轻、后端无服务、AI 服务端隔离</h2>
+    <p class="subtitle">CRUD 走 SDK + RLS（无需自建 REST），AI 长任务走 Edge Function（密钥服务端隔离），文件走 Storage 直传。</p>
+    <div class="body">
+      <div class="arch-layer">
+        <div class="lh"><span class="name">🎨 前端表现层</span><span class="tag">Next.js 14 · App Router · TypeScript</span></div>
+        <div class="chips">
+          <span class="chip">Tailwind CSS</span><span class="chip">shadcn/ui</span>
+          <span class="chip">Recharts(图表)</span><span class="chip">CodeMirror(YAML)</span>
+          <span class="chip">js-yaml(实时校验)</span><span class="chip">Light/Dark</span><span class="chip">响应式</span>
+        </div>
+      </div>
+      <div class="arch-layer">
+        <div class="lh"><span class="name">⚡ 边缘函数层 · Supabase Edge Function (Deno)</span><span class="tag">AI 密钥隔离</span></div>
+        <div class="chips">
+          <span class="chip">meeting-create-audio/text</span><span class="chip">api-generate</span>
+          <span class="chip">feedback-analyze</span><span class="chip">feedback-gen-requirement</span>
+          <span class="chip">LLM 封装层(LLMProvider 接口)</span><span class="chip">状态机编排</span>
+        </div>
+      </div>
+      <div class="arch-layer">
+        <div class="lh"><span class="name">🧠 AI 能力层 · 阿里云通义千问 DashScope</span><span class="tag g">数据不出境</span></div>
+        <div class="chips">
+          <span class="chip">Qwen-Max(提取/生成)</span><span class="chip">Qwen-Plus(聚类/草稿)</span>
+          <span class="chip">fun-asr / Paraformer(语音转写)</span><span class="chip">OpenAI 兼容接口</span>
+        </div>
+      </div>
+      <div class="arch-layer">
+        <div class="lh"><span class="name">💾 数据与存储层 · Supabase</span><span class="tag">全表 RLS</span></div>
+        <div class="chips">
+          <span class="chip">Postgres(11 张表)</span><span class="chip">Auth(邮箱+Google OAuth)</span>
+          <span class="chip">Storage(音频/反馈文件)</span><span class="chip">触发器(频次同步/编辑联动)</span>
+        </div>
+      </div>
+      <div class="arch-layer">
+        <div class="lh"><span class="name">📈 可观测与增长层</span><span class="tag a">埋点/SEO</span></div>
+        <div class="chips">
+          <span class="chip">PostHog(自定义事件)</span><span class="chip">GA4</span>
+          <span class="chip">SEO(meta/sitemap/robots)</span><span class="chip">Stripe(支付预留)</span>
+        </div>
+      </div>
+      <div class="footnote">部署：Vercel（前端 + Edge Function）+ Supabase（数据/Auth/Storage）+ 阿里云 DashScope（AI）。来源：《SOW》§2.4、《接口契约》§0。</div>
+    </div>
+  </section>
+
+  <!-- 12 系统设计·数据来源与接入 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">系统设计 / 12</div>
+    </div>
+    <div class="crumb">DATA & INTEGRATION · 数据来源与接入方式</div>
+    <h2 class="title">数据来源、模型与系统接入</h2>
+    <p class="subtitle">11 张表覆盖全部业务实体；四类数据来源；接入方式按通道分层，鉴权与隔离双重保护。</p>
+    <div class="body scroll">
+      <div class="col-half">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(56,189,248,.15)">🗂️</span> 数据模型（11 张表）</h3>
+          <div class="pillrow">
+            <span class="chip">profiles</span><span class="chip">projects</span>
+            <span class="chip">meetings</span><span class="chip">meeting_items</span>
+            <span class="chip">api_drafts</span><span class="chip">api_versions</span>
+            <span class="chip">feedback_analyses</span><span class="chip">feedback_items</span>
+            <span class="chip">feedback_topics</span><span class="chip">requirement_drafts</span>
+            <span class="chip">export_logs</span>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin-top:6px">UUID 主键 · 全表 RLS(user_id=auth.uid()) · 状态机字段 · llm_usage 留痕 · is_edited 指标支撑</p>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15)">📥</span> 四类数据来源</h3>
+          <ul class="clean">
+            <li><b>会议音频</b>：用户上传 mp3/wav/m4a（≤50MB），直传 Storage</li>
+            <li><b>会议文本/反馈文本</b>：用户粘贴（反馈每条换行）</li>
+            <li><b>反馈文件</b>：用户上传 CSV/TXT（CSV 指定反馈列）</li>
+            <li><b>业务需求/API 规范</b>：PM 手动输入（规范可项目级复用）</li>
+          </ul>
+        </div>
+      </div>
+      <table class="tbl" style="margin-top:14px">
+        <thead><tr><th style="width:22%">接入通道</th><th style="width:33%">用途</th><th>安全/隔离机制</th></tr></thead>
+        <tbody>
+          <tr><td><b style="color:var(--brand)">SDK 直连 + RLS</b></td><td>列表/详情/编辑/删除等常规 CRUD</td><td>RLS 策略 user_id=auth.uid()，update 双 using+with check 防越权；A/B 账号互查返回 0 行</td></tr>
+          <tr><td><b style="color:var(--green)">Edge Function</b></td><td>转录/提取/生成/聚类等 AI 长任务</td><td>Bearer token 鉴权 + getUser() 校验；<b>DashScope key 绝不进前端</b>；统一错误码 + retryable 标记</td></tr>
+          <tr><td><b style="color:var(--sys)">Storage 签名 URL</b></td><td>音频/反馈文件上传</td><td>方案 A 前端直传 → 传 path 给 EF；按 user_id 目录隔离（foldername=auth.uid()）</td></tr>
+          <tr><td><b style="color:var(--amber)">前端轮询</b></td><td>长任务实时进度提示</td><td>2s 轮询 status 字段；卸载停轮询/后台降频/指数退避（useTaskStatus hook）</td></tr>
+        </tbody>
+      </table>
+      <div class="footnote">鉴权归属：所有写入以 user_id 为归属，前端无法伪造（RLS 双重保护）。来源：《数据模型设计文档》《接口契约》§0/§5/§6。</div>
+    </div>
+  </section>
+
+  <!-- 13 AI 链路与模型选型 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">系统设计 / 13</div>
+    </div>
+    <div class="crumb">AI CHAIN · 模型选型关键决策</div>
+    <h2 class="title">模型选型：OpenAI → 通义千问</h2>
+    <p class="subtitle">一次切换同时化解"数据合规"与"成本"两大阻断性风险，且迁移成本可控（OpenAI 兼容接口）。</p>
+    <div class="body">
+      <table class="tbl">
+        <thead><tr><th style="width:18%">维度</th><th style="width:34%">OpenAI 原方案</th><th style="width:34%">通义千问方案</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td><b>数据合规</b></td><td>音频/反馈送境外，存在出境风险 🔴</td><td>DashScope 国内区域，<b style="color:var(--green)">数据不出境</b></td><td><span class="tag g">✅ 化解阻断</span></td></tr>
+          <tr><td><b>中文质量</b></td><td>GPT-4o 中文良好</td><td>Qwen/Paraformer 中文原生，会议/反馈更适配</td><td><span class="tag g">✅ 占优</span></td></tr>
+          <tr><td><b>成本</b></td><td>GPT-4o + Whisper 双计费</td><td>国内定价更低 + 新用户免费额度</td><td><span class="tag g">✅ 缓解 Q9</span></td></tr>
+          <tr><td><b>迁移成本</b></td><td>—</td><td>OpenAI 兼容接口，仅改 base_url + key</td><td><span class="tag a">⚠️ ≈0.5-1PD</span></td></tr>
+        </tbody>
+      </table>
+      <div class="grid g3" style="margin-top:16px">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(56,189,248,.15)">📝</span> 文本模型分工</h3>
+          <ul class="clean">
+            <li><b>Qwen-Max</b>：会议结构化提取、OpenAPI 生成（质量优先）</li>
+            <li><b>Qwen-Plus</b>：反馈聚类、需求草稿（量大、性价比）</li>
+            <li>封装层按 purpose 参数化，未来调参不动业务代码</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15)">🎙️</span> 语音转写</h3>
+          <ul class="clean">
+            <li><b>fun-asr（录音文件识别版）</b>：支持<b>热词</b>，会议术语/人名更准</li>
+            <li>异步任务（提交→轮询→取结果），复用 status 状态机</li>
+            <li>说话人分离列 v2 bonus；备选回退 Paraformer-v2</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(251,191,36,.15)">⚙️</span> 工程保障</h3>
+          <ul class="clean">
+            <li>response_format 强制 JSON + 服务端兜底解析重试</li>
+            <li>结构化场景关闭"思考模式"保速度与 JSON 稳定</li>
+            <li>LLMProvider 接口抽象，网络不达标可迁阿里云 FC</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footnote">该决策已于 2026-07-29 CP0 设计评审会由决策者拍板 Go，冻结为基线 v1.0。来源：《设计评审清单》§6。</div>
+    </div>
+  </section>
+
+  <!-- 14 风险与人工介入 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">风险与人工介入 / 14</div>
+    </div>
+    <div class="crumb">RISK & HUMAN-IN-THE-LOOP · 风险与人工介入</div>
+    <h2 class="title">AI 不自主执行，人确认是唯一终点</h2>
+    <p class="subtitle">所有 AI 产出默认可被人工编辑/校对；落地动作不自动写外部系统。主要风险均有明确缓解与降级路径。</p>
+    <div class="body">
+      <div class="col-half">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(251,191,36,.15)">✋</span> 需要人工确认的环节</h3>
+          <ul class="clean">
+            <li class="yes"><b>会议条目校对</b>：编辑/删除/改优先级/改负责人/手动新增</li>
+            <li class="yes"><b>API 草稿评审</b>：研发评审/编辑 YAML/保存版本/重新生成</li>
+            <li class="yes"><b>反馈主题操作</b>：合并/编辑/删除主题、评估优先级、选题</li>
+            <li class="yes"><b>需求草稿审定</b>：编辑后决定是否带入 API 设计器</li>
+            <li class="yes"><b>导出与外溢</b>：选择格式、复制/下载，人决定去向</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15)">🛡️</span> 准确度兜底机制</h3>
+          <ul class="clean">
+            <li>原文引用 quote_offset 程序化追溯（≥90%）</li>
+            <li>OpenAPI 服务端 swagger-parser 校验 + 重试</li>
+            <li>频次触发器严格同步（100%）</li>
+            <li>"固定评测集 + 人工抽检"双重验证留档</li>
+          </ul>
+        </div>
+      </div>
+      <table class="tbl" style="margin-top:14px">
+        <thead><tr><th style="width:22%">主要风险</th><th style="width:12%">等级</th><th style="width:40%">影响</th><th>缓解 / 降级</th></tr></thead>
+        <tbody>
+          <tr><td><b>数据合规（音频/反馈出境）</b></td><td><span class="tag g">✅ 已化解</span></td><td>能否面向国内客户售卖</td><td>切通义千问，数据不出境；上传前提示+敏感字段建议，不强脱敏</td></tr>
+          <tr><td><b>Edge Function↔DashScope 网络连通</b></td><td><span class="tag a">⚠️ 待实测</span></td><td>跨境延迟/超时影响体验</td><td>Day 2 实测 P50/P95；不达标则 AI 层迁阿里云 FC（LLMProvider 已预留）</td></tr>
+          <tr><td><b>AI 准确度不达标</b></td><td><span class="tag a">⚠️</span></td><td>模块可用但价值打折</td><td>评测集驱动 + Prompt 迭代；程序化项不达标当日修复</td></tr>
+          <tr><td><b>OpenAI 兼容 JSON 稳定性</b></td><td><span class="tag a">⚠️</span></td><td>结构化提取偶发破坏 JSON</td><td>response_format 强制 + 服务端兜底解析与重试</td></tr>
+          <tr><td><b>5 工作日交付密度</b></td><td><span class="tag a">⚠️</span></td><td>排期紧张</td><td>模块独立并行；Day 2-3 打通 AI 闭环，Day 6 Demo</td></tr>
+        </tbody>
+      </table>
+      <div class="footnote">设计原则：AI 是"执行手"，人是"决策与确认的唯一主体"。来源：《SOW》§8、《设计评审清单》§6.4/§8。</div>
+    </div>
+  </section>
+
+  <!-- 15 里程碑与交付 -->
+  <section class="slide">
+    <div class="topbar">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">交付路径 / 15</div>
+    </div>
+    <div class="crumb">DELIVERY · 里程碑与交付路径</div>
+    <h2 class="title">Day 2-6 核心链路 Sprint + 后续五阶段</h2>
+    <p class="subtitle">设计已冻结（CP0 通过），本 Sprint 交付三模块可演示 Demo，后续阶段覆盖联调/验收/上线。</p>
+    <div class="body">
+      <div class="flow" style="margin-bottom:18px">
+        <div class="step" style="border-top:3px solid var(--violet)">
+          <div class="h"><span>Day 2</span></div>
+          <div class="d"><b>设计冻结 + 平台底座</b><br>DDL/RLS/触发器落地、Auth、Dashboard、OpenAI 封装、状态机</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--brand)">
+          <div class="h"><span>Day 3</span></div>
+          <div class="d"><b>会议模块 AI 闭环</b><br>音频/文本 → 转录 → 四类提取 + 摘要 → 分组展示</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--green)">
+          <div class="h"><span>Day 4</span></div>
+          <div class="d"><b>API 模块</b><br>需求 → 生成 OpenAPI → 代码视图(YAML 校验)</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--amber)">
+          <div class="h"><span>Day 5</span></div>
+          <div class="d"><b>反馈模块 + 横切</b><br>聚类/情感/频次 → 图表+主题卡；UI 基础完成</div>
+        </div>
+        <div class="arr">→</div>
+        <div class="step" style="border-top:3px solid var(--rose)">
+          <div class="h"><span>Day 6</span></div>
+          <div class="d"><b>集成/评测/Demo</b><br>端到端联调、准确度达标、三模块 Demo 可演示</div>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(56,189,248,.15)">🎯</span> 后续交付阶段（Day 7+）</h3>
+          <ul class="clean">
+            <li><b>阶段二·补全增强</b>（~1周）：P1 全量、版本/合并/图表/响应式/埋点</li>
+            <li><b>阶段三·端到端联调 UAT</b>（~3天）：真实数据联调、RLS 验证、PM 走查</li>
+            <li><b>阶段四·性能/合规/可观测加固</b>（~3天）：长任务稳定、用量看板、合规落地</li>
+            <li><b>阶段五·预发布与上线</b>（~2天）：Vercel 验收、Stripe 预留、正式上线</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="ico" style="background:rgba(52,211,153,.15)">📊</span> 关键成功指标</h3>
+          <div class="kpi-row">
+            <div class="kpi"><div class="v b">3</div><div class="k">核心模块端到端走通</div></div>
+            <div class="kpi"><div class="v g">100%</div><div class="k">OpenAPI 合法 / 频次准确</div></div>
+          </div>
+          <div class="kpi-row">
+            <div class="kpi"><div class="v a">≥4/5</div><div class="k">聚类/语义主观评分</div></div>
+            <div class="kpi"><div class="v r">北极星</div><div class="k">有效结构化产出数</div></div>
+          </div>
+          <p style="font-size:11.5px;color:var(--muted);margin-top:10px">北极星 = 会议条目 + API 草稿 + 反馈主题（且未被大幅改写），衡量"AI 真正替代了多少人工整理"。</p>
+        </div>
+      </div>
+      <div class="footnote">关键路径：D0 设计冻结 → M0 按 DDL 落地 → M1 AI 闭环 → M2 → M3 → 集成评测 Demo。来源：《需求拆解与排期文档 v1.1》§5/§6。</div>
+    </div>
+  </section>
+
+  <!-- 16 结尾 -->
+  <section class="slide cover">
+    <div class="topbar" style="width:100%">
+      <div class="brand"><span class="logo">🌉</span> 需求桥</div>
+      <div class="pagemark">结语 / 16</div>
+    </div>
+    <div style="margin:auto;width:100%;text-align:center">
+      <div class="biglogo">🌉</div>
+      <h1 class="hero" style="font-size:46px">把<b style="color:var(--brand)">决策</b>变成<b style="color:var(--green)">执行</b><br>只差这一座桥</h1>
+      <p class="lead" style="margin:20px auto 30px;text-align:center">需求桥 v1 以最小可行边界（单用户 + 三模块独立）验证核心价值：AI 一次性结构化"会议/反馈/需求"，人确认导出，产研沟通成本与返工显著下降。</p>
+      <div class="meta" style="justify-content:center">
+        <span class="tag g">✅ 设计基线已冻结 v1.0</span>
+        <span class="tag">✅ 合规阻断已化解</span>
+        <span class="tag a">⏳ 进入 M0 开发</span>
+      </div>
+      <div style="margin-top:40px;color:var(--muted);font-size:13px;line-height:2">
+        RequirementBridge · 需求桥（会议决策 → 任务执行）<br>
+        汇报日期 2026-07-29 · 基线 CP0 冻结 v1.0 · 期待与您共同推进
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="nav">
+  <button id="first" title="首页">⏮</button>
+  <button id="prev" title="上一页">‹</button>
+  <span class="counter"><span id="cur">1</span> / <span id="total">16</span></span>
+  <button id="next" title="下一页">›</button>
+  <button id="last" title="末页">⏭</button>
+</div>
+
+<script>
+  const slides=document.querySelectorAll('.slide');
+  const total=slides.length;
+  let idx=0;
+  document.getElementById('total').textContent=total;
+  function go(n){
+    idx=Math.max(0,Math.min(total-1,n));
+    slides.forEach((s,i)=>s.classList.toggle('active',i===idx));
+    document.getElementById('cur').textContent=idx+1;
+    document.getElementById('progress').style.width=((idx+1)/total*100)+'%';
+  }
+  document.getElementById('next').onclick=()=>go(idx+1);
+  document.getElementById('prev').onclick=()=>go(idx-1);
+  document.getElementById('first').onclick=()=>go(0);
+  document.getElementById('last').onclick=()=>go(total-1);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(idx+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(idx-1);}
+    else if(e.key==='Home'){go(0);} else if(e.key==='End'){go(total-1);}
+  });
+  // click right half to advance on cover-style slides
+  go(0);
+</script>
+</body>
+</html>

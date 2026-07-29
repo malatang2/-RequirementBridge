@@ -1,0 +1,43 @@
+%%%% TO-BE 目标：同样三泳道 × 五阶段，Agent 接管结构化与生成，人只校对与决策
+flowchart LR
+    subgraph L1 ["👤 人（PM / 研发）—— 只做校对与决策"]
+        direction TB
+        h1["① 采集<br/>上传音频 · 粘贴文本/反馈"]
+        h2["② 校对 ✅<br/>检查转录文本"]
+        h3["③ 校对 ✅<br/>编辑条目 / 主题"]
+        h4["④ 转化 ✅<br/>输入需求 · 评审接口"]
+        h5["⑤ 交付 ✅<br/>确认后导出"]
+        h1 --> h2 --> h3 --> h4 --> h5
+    end
+
+    subgraph L2 ["🤖 Agent（Whisper / GPT-4o）—— 承担结构化与生成"]
+        direction TB
+        a1["🆕 Whisper 转录"]
+        a2["🆕 提取决策·待办·需求"]
+        a3["🆕 聚类 · 情感 · 优先级"]
+        a4["🆕 生成 OpenAPI 草稿"]
+        a1 --> a2
+    end
+
+    subgraph L3 ["🗄️ 企业系统 —— 统一底座"]
+        direction TB
+        s1["Supabase Storage"]
+        s2["Supabase Postgres"]
+        s3["OpenAI API · PostHog/GA"]
+    end
+
+    h1 ==> a1 ==> h2
+    a2 ==> h3
+    h3 ==> a3
+    h4 ==> a4 ==> h5
+    h1 -. 存储 .-> s1
+    a2 -. 落库 .-> s2
+    a4 -. 落库 .-> s2
+    a1 -. 调用 .-> s3
+
+    classDef human fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:1.5px;
+    classDef agentYes fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+    classDef sys fill:#f8fafc,stroke:#64748b,color:#334155;
+    class h1,h2,h3,h4,h5 human;
+    class a1,a2,a3,a4 agentYes;
+    class s1,s2,s3 sys;

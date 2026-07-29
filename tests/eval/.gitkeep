@@ -1,0 +1,2 @@
+# 评测集目录占位（见上 supabase/migrations/.gitkeep 说明同此处用途）
+# tests/eval/ 下放置：meeting_eval.json / api_eval.json / feedback_eval.json
