@@ -13,29 +13,32 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { TaskStatus } from "@/types/database";
+import type { TaskStatus, GenStatus } from "@/types/database";
 
-const TERMINAL_STATES: TaskStatus[] = ["completed", "failed"];
+/** 任意状态类型（会议/反馈用 TaskStatus，API 用 GenStatus），都含 completed/failed 终态 */
+type AnyStatus = TaskStatus | GenStatus;
+
+const TERMINAL_STATES: AnyStatus[] = ["completed", "failed"];
 const STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 分钟无更新视为僵尸态
 
-interface UseTaskStatusOptions {
+interface UseTaskStatusOptions<S extends AnyStatus> {
   /** 轮询取最新 status 的函数，返回 { status, updatedAt } */
-  fetcher: () => Promise<{ status: TaskStatus; updatedAt: string }>;
+  fetcher: () => Promise<{ status: S; updatedAt: string }>;
   /** 是否启用轮询（终态自动停） */
   enabled: boolean;
   /** 初始状态 */
-  initialStatus: TaskStatus;
+  initialStatus: S;
   /** 轮询基础间隔（ms），默认 2000（接口契约 API-3：2s 一次） */
   intervalMs?: number;
 }
 
-export function useTaskStatus({
+export function useTaskStatus<S extends AnyStatus>({
   fetcher,
   enabled,
   initialStatus,
   intervalMs = 2000,
-}: UseTaskStatusOptions) {
-  const [status, setStatus] = useState<TaskStatus>(initialStatus);
+}: UseTaskStatusOptions<S>) {
+  const [status, setStatus] = useState<S>(initialStatus);
   const [isStale, setIsStale] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffRef = useRef(intervalMs);
@@ -71,7 +74,7 @@ export function useTaskStatus({
           const staleSince = new Date(result.updatedAt).getTime();
           if (Date.now() - staleSince > STALE_TIMEOUT_MS) {
             setIsStale(true);
-            setStatus("failed");
+            setStatus("failed" as S);
             return;
           }
         }
