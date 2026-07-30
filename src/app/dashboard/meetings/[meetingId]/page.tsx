@@ -6,8 +6,12 @@ import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
   groupItemsByCategory,
+  type MeetingExportData,
 } from "@/lib/meetings";
 import { MeetingDetailClient } from "./detail-client";
+import { MeetingItemCard } from "@/components/dashboard/meeting-item-card";
+import { AddItemInline } from "@/components/dashboard/add-item-inline";
+import { MeetingExportBar } from "@/components/dashboard/meeting-export-bar";
 
 export default async function MeetingDetailPage({
   params,
@@ -28,11 +32,28 @@ export default async function MeetingDetailPage({
   const { data: itemsData } = await supabase
     .from("meeting_items")
     .select("*")
-    .eq("meeting_id", meetingId);
+    .eq("meeting_id", meetingId)
+    .order("created_at", { ascending: true });
 
   const meeting_ = meeting as Meeting;
   const items = (itemsData as MeetingItem[]) ?? [];
   const grouped = groupItemsByCategory(items);
+  const isCompleted = meeting_.status === "completed";
+
+  const exportData: MeetingExportData = {
+    title: meeting_.title,
+    summary: meeting_.summary,
+    items: items.map((it) => ({
+      id: it.id,
+      category: it.category,
+      content: it.content,
+      assignee: it.assignee,
+      priority: it.priority,
+      quote: it.quote,
+      quoteOffset: it.quote_offset,
+    })),
+    createdAt: meeting_.created_at,
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -43,12 +64,16 @@ export default async function MeetingDetailPage({
         >
           ← 返回会议列表
         </Link>
+        {isCompleted && <MeetingExportBar data={exportData} />}
       </div>
 
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{meeting_.title}</h1>
         <p className="mt-1 text-xs text-muted-foreground">
           {new Date(meeting_.created_at).toLocaleString("zh-CN")}
+          {meeting_.is_edited && (
+            <span className="ml-2 rounded bg-muted px-1.5 py-0.5">已编辑</span>
+          )}
         </p>
       </div>
 
@@ -70,67 +95,29 @@ export default async function MeetingDetailPage({
       )}
 
       {/* 四类分组 */}
-      <div className="space-y-6">
-        {CATEGORY_ORDER.map((cat) => {
-          const list = grouped[cat];
-          return (
-            <section key={cat}>
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                {CATEGORY_LABELS[cat]}
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  {list.length}
-                </span>
-              </h2>
-              {list.length === 0 ? (
-                <p className="py-4 text-center text-xs text-muted-foreground">
-                  无
-                </p>
-              ) : (
+      {isCompleted && (
+        <div className="space-y-6">
+          {CATEGORY_ORDER.map((cat) => {
+            const list = grouped[cat];
+            return (
+              <section key={cat}>
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  {CATEGORY_LABELS[cat]}
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    {list.length}
+                  </span>
+                </h2>
                 <div className="space-y-2">
                   {list.map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-lg border border-border bg-card p-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm">{item.content}</p>
-                        <div className="flex shrink-0 gap-2 text-xs">
-                          <PriorityTag priority={item.priority} />
-                        </div>
-                      </div>
-                      <div className="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>
-                          负责人：{item.assignee ?? "待分配"}
-                        </span>
-                      </div>
-                      {item.quote && (
-                        <p className="mt-2 border-l-2 border-muted pl-2 text-xs italic text-muted-foreground">
-                          “{item.quote}”
-                          {item.quote_offset === null && (
-                            <span className="ml-1 text-amber-600">
-                              ⚠ 引用未匹配原文
-                            </span>
-                          )}
-                        </p>
-                      )}
-                    </div>
+                    <MeetingItemCard key={item.id} item={item} />
                   ))}
+                  <AddItemInline meetingId={meeting_.id} category={cat} />
                 </div>
-              )}
-            </section>
-          );
-        })}
-      </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
-}
-
-function PriorityTag({ priority }: { priority: "high" | "medium" | "low" }) {
-  const map = {
-    high: { label: "高优", color: "text-red-600" },
-    medium: { label: "中", color: "text-amber-600" },
-    low: { label: "低", color: "text-muted-foreground" },
-  };
-  const m = map[priority];
-  return <span className={m.color}>{m.label}</span>;
 }

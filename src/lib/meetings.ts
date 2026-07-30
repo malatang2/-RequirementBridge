@@ -207,4 +207,94 @@ export function groupItemsByCategory<T extends { category: MeetingItemCategory }
   return grouped;
 }
 
+// ============ seam 4：导出（T1.6）============
+
+/** 导出输入数据（与 DB 行解耦，纯函数易测） */
+export interface MeetingExportData {
+  title: string;
+  summary: string | null;
+  items: ParsedMeetingItemWithId[];
+  createdAt: string;
+}
+
+const PRIORITY_LABEL: Record<PriorityLevel, string> = {
+  high: "高优",
+  medium: "中",
+  low: "低",
+};
+
+/** 转义 CSV 字段（含逗号/引号/换行需加引号并把内部引号翻倍） */
+export function escapeCsvField(value: string | null): string {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  if (/[",\n\r]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+/**
+ * 生成会议导出 Markdown（纯函数 seam）。
+ * 结构：标题 + 元信息 + 摘要 + 四类分组（每条含负责人/优先级/原文引用）。
+ */
+export function exportMeetingToMarkdown(data: MeetingExportData): string {
+  const lines: string[] = [];
+  lines.push(`# ${data.title}`);
+  lines.push("");
+  lines.push(`> 日期：${new Date(data.createdAt).toLocaleString("zh-CN")}`);
+  lines.push("");
+
+  if (data.summary) {
+    lines.push("## 摘要");
+    lines.push("");
+    lines.push(data.summary);
+    lines.push("");
+  }
+
+  const grouped = groupItemsByCategory(data.items);
+  for (const cat of CATEGORY_ORDER) {
+    const list = grouped[cat];
+    if (list.length === 0) continue;
+    lines.push(`## ${CATEGORY_LABELS[cat]}（${list.length}）`);
+    lines.push("");
+    for (const it of list) {
+      const meta = [
+        it.assignee ? `@${it.assignee}` : "@待分配",
+        `[${PRIORITY_LABEL[it.priority]}]`,
+      ].join(" ");
+      lines.push(`- **${it.content}** ${meta}`);
+      if (it.quote) {
+        lines.push(`  - > ${it.quote}`);
+      }
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd() + "\n";
+}
+
+/**
+ * 生成会议导出 CSV（纯函数 seam）。
+ * 列：分类,内容,负责人,优先级,原文引用。
+ */
+export function exportMeetingToCsv(data: MeetingExportData): string {
+  const header = ["分类", "内容", "负责人", "优先级", "原文引用"]
+    .map(escapeCsvField)
+    .join(",");
+  const rows = data.items.map((it) =>
+    [
+      CATEGORY_LABELS[it.category],
+      it.content,
+      it.assignee ?? "",
+      PRIORITY_LABEL[it.priority],
+      it.quote ?? "",
+    ]
+      .map(escapeCsvField)
+      .join(",")
+  );
+  // BOM 让 Excel 正确识别 UTF-8
+  return "\uFEFF" + [header, ...rows].join("\r\n") + "\r\n";
+}
+
+
 export { VALID_CATEGORIES, VALID_PRIORITIES };

@@ -140,3 +140,75 @@ export async function createAudioMeeting(
   revalidatePath("/dashboard/meetings");
   return { ok: true, meetingId: meeting.id };
 }
+
+// ============ T1.5 条目编辑/增删/改优先级 ============
+
+export type ItemActionResult = { ok: true } | { ok: false; error: string };
+
+/** 编辑条目（内容/负责人/优先级/分类） */
+export async function updateMeetingItem(
+  itemId: string,
+  patch: {
+    content?: string;
+    assignee?: string | null;
+    priority?: "high" | "medium" | "low";
+    category?: "decision" | "todo" | "requirement" | "issue";
+  }
+): Promise<ItemActionResult> {
+  if (patch.content !== undefined && !patch.content.trim()) {
+    return { ok: false, error: "内容不能为空" };
+  }
+  const supabase = await createSupabaseActionClient();
+  const update: Record<string, unknown> = { is_edited: true };
+  if (patch.content !== undefined) update.content = patch.content.trim();
+  if (patch.assignee !== undefined) update.assignee = patch.assignee?.trim() || null;
+  if (patch.priority !== undefined) update.priority = patch.priority;
+  if (patch.category !== undefined) update.category = patch.category;
+
+  const { error } = await supabase.from("meeting_items").update(update).eq("id", itemId);
+  if (error) return { ok: false, error: "更新失败" };
+  revalidatePath("/dashboard/meetings");
+  return { ok: true };
+}
+
+/** 删除条目 */
+export async function deleteMeetingItem(itemId: string): Promise<ItemActionResult> {
+  const supabase = await createSupabaseActionClient();
+  const { error } = await supabase.from("meeting_items").delete().eq("id", itemId);
+  if (error) return { ok: false, error: "删除失败" };
+  revalidatePath("/dashboard/meetings");
+  return { ok: true };
+}
+
+/** 手动新增条目 */
+export async function addMeetingItem(
+  meetingId: string,
+  input: {
+    category: "decision" | "todo" | "requirement" | "issue";
+    content: string;
+    assignee?: string | null;
+    priority?: "high" | "medium" | "low";
+  }
+): Promise<ItemActionResult> {
+  if (!input.content.trim()) return { ok: false, error: "内容不能为空" };
+
+  const supabase = await createSupabaseActionClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "未登录" };
+
+  const { error } = await supabase.from("meeting_items").insert({
+    meeting_id: meetingId,
+    user_id: user.id,
+    category: input.category,
+    content: input.content.trim(),
+    assignee: input.assignee?.trim() || null,
+    priority: input.priority ?? "medium",
+    is_edited: true,
+    is_manual: true, // 手动新增，触发器会标记 meeting.is_edited
+  });
+  if (error) return { ok: false, error: "新增失败" };
+  revalidatePath("/dashboard/meetings");
+  return { ok: true };
+}

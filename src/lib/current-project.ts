@@ -20,7 +20,9 @@ export async function setCurrentProjectId(id: string): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_KEY, id, {
     path: "/",
-    httpOnly: true,
+    // 项目 ID 非敏感，关闭 httpOnly 以便客户端（current-project-client.ts）读取。
+    // 否则 document.cookie 读不到，导致新建页"选了项目仍提示请先选择"。
+    httpOnly: false,
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365, // 1 年
   });
