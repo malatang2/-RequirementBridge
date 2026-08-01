@@ -13,6 +13,18 @@ export type TaskStatus =
 
 export type GenStatus = "generating" | "completed" | "failed";
 
+/**
+ * Requirement 生命周期（对应 requirement_lifecycle 枚举，007 迁移）。
+ * 与 GenStatus 并存：GenStatus 表征 AI 任务态（generating/completed/failed），
+ * RequirementLifecycle 接管业务态。
+ */
+export type RequirementLifecycle =
+  | "draft"
+  | "confirmed"
+  | "in_progress"
+  | "delivered"
+  | "parked";
+
 export type MeetingItemCategory = "decision" | "todo" | "requirement" | "issue";
 export type PriorityLevel = "high" | "medium" | "low";
 export type SentimentLabel = "positive" | "negative" | "neutral";
@@ -64,6 +76,7 @@ export interface MeetingItem {
   quote_offset: number | null;
   is_edited: boolean;
   is_manual: boolean;
+  transferred_to_feedback: boolean; // 008：会议条目转入反馈标记（防重复转入 + 角标）
   created_at: string;
   updated_at: string;
 }
@@ -80,6 +93,7 @@ export interface ApiDraft {
   status: GenStatus;
   error_message: string | null;
   is_edited: boolean;
+  source_requirement_id: string | null; // 007：需求→API 一键带入的来源 Requirement（null=未关联）
   llm_usage: { llm?: unknown } | null;
   completed_at: string | null;
   created_at: string;
@@ -112,6 +126,7 @@ export interface FeedbackAnalysis {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  source_label: string | null; // 008：来源标注（如"来自会议《X》"）
 }
 
 export interface FeedbackItem {
@@ -122,6 +137,8 @@ export interface FeedbackItem {
   topic_id: string | null;
   sentiment: SentimentLabel | null;
   created_at: string;
+  source_type: string; // 008：来源类型（paste | file | meeting | batch_import），默认 'paste'
+  source_meta: Record<string, unknown> | null; // 008：出身溯源（如 {meeting_id, meeting_item_id}），非同步契约
 }
 
 export interface FeedbackTopic {
@@ -144,12 +161,16 @@ export interface RequirementDraft {
   id: string;
   user_id: string;
   project_id: string;
-  source_type: string;
+  source_type: string; // 'feedback_topic' | 'meeting_item' | 'manual'（应用层约束）
   source_topic_id: string | null;
+  source_meeting_item_id: string | null; // 007：来自会议条目（source_type='meeting_item' 时非空）
   title: string;
   content: string;
-  status: GenStatus;
+  status: GenStatus; // AI 任务态（generating/completed/failed），保留不动
+  priority: PriorityLevel; // 007：优先级，默认 'medium'
+  lifecycle: RequirementLifecycle; // 007：业务生命周期，默认 'draft'（与 status 并存）
   is_edited: boolean;
+  deleted_at: string | null; // 007：软删（null=未删）
   created_at: string;
   updated_at: string;
 }
