@@ -76,9 +76,7 @@ export async function createApiDraft(
       .eq("id", draft.id);
   }
 
-  // PostHog 埋点（T4.2）
-  const { track } = await import("@/lib/analytics");
-  await track("api_generation_started", { draftId: draft.id });
+  // PostHog track 已移至 api-designer/new 客户端组件（server runtime 无 window，原调用静默失效）
 
   revalidatePath("/dashboard/api-designer");
   return { ok: true, draftId: draft.id };

@@ -63,3 +63,12 @@ export async function resetUser() {
   const c = await getClient();
   if (c) c.reset();
 }
+
+/**
+ * 在浏览器引导 PostHog 初始化（由根布局客户端组件挂载时调用）。
+ * getClient() 有 initAttempted 模块级缓存，重复调用幂等。
+ * capture_pageview: true 会自动上报首次 pageview。
+ */
+export async function bootstrapAnalytics() {
+  await getClient();
+}

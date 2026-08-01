@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createApiDraft } from "../actions";
 import { getCurrentProjectIdClient } from "@/lib/current-project-client";
+import { track } from "@/lib/analytics";
 
 export default function NewApiDraftPage() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function NewApiDraftPage() {
       setError(result.error);
       return;
     }
+    await track("api_generation_started", { draftId: result.draftId });
     router.push(`/dashboard/api-designer/${result.draftId}`);
   }
 

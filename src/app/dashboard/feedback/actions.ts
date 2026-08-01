@@ -86,9 +86,7 @@ export async function createFeedbackAnalysis(
       .eq("id", analysis.id);
   }
 
-  // PostHog 埋点（T4.2）
-  const { track } = await import("@/lib/analytics");
-  await track("feedback_analysis_started", { analysisId: analysis.id, count: validation.items.length });
+  // PostHog track 已移至 feedback/new 客户端组件（server runtime 无 window，原调用静默失效）
 
   revalidatePath("/dashboard/feedback");
   return { ok: true, analysisId: analysis.id };

@@ -24,17 +24,13 @@ export async function signInWithEmail(
   }
 
   const supabase = await createSupabaseActionClient();
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     return { error: "邮箱或密码错误" };
   }
 
-  // PostHog 关联用户身份（T4.2，无 key 静默降级）
-  if (data.user) {
-    const { identifyUser } = await import("@/lib/analytics");
-    await identifyUser(data.user.id, { email });
-  }
+  // PostHog identify 已移至客户端 AnalyticsBootstrap（server runtime 无 window，原调用静默失效）
 
   redirect("/dashboard");
 }

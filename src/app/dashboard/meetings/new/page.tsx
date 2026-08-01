@@ -11,6 +11,7 @@ import {
 } from "@/lib/meetings";
 import { createSupabaseClient } from "@/lib/supabase/client";
 import { getCurrentProjectIdClient } from "@/lib/current-project-client";
+import { track } from "@/lib/analytics";
 
 type Mode = "audio" | "text";
 
@@ -47,6 +48,7 @@ export default function NewMeetingPage() {
           setError(result.error);
           return;
         }
+        await track("meeting_created", { meetingId: result.meetingId, mode: "text" });
         router.push(`/dashboard/meetings/${result.meetingId}`);
       } else {
         // 音频模式：校验 + 直传 Storage + 建记录
