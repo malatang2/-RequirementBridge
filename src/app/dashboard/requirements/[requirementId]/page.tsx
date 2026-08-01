@@ -1,8 +1,8 @@
-import { notFound } from "next/navigation";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { RequirementDraft } from "@/types/database";
-import { CopyButton } from "@/components/dashboard/copy-button";
+import { RequirementEditor } from "@/components/dashboard/requirement-editor";
 
 export default async function RequirementDetailPage({
   params,
@@ -12,33 +12,26 @@ export default async function RequirementDetailPage({
   const { requirementId } = await params;
   const supabase = await createSupabaseServerClient();
 
+  // 直链仍可访问软删记录（deleted_at 非空），由 Editor 展示"已删除"提示。
   const { data: draft } = await supabase
     .from("requirement_drafts")
     .select("*")
     .eq("id", requirementId)
-    .single();
+    .maybeSingle();
 
   if (!draft) notFound();
   const d = draft as RequirementDraft;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <Link href="/dashboard/feedback" className="text-sm text-muted-foreground hover:text-foreground">
-        ← 返回反馈
+      <Link
+        href="/dashboard/requirements"
+        className="text-sm text-muted-foreground hover:text-foreground"
+      >
+        ← 返回需求池
       </Link>
 
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{d.title}</h1>
-        {d.source_type === "feedback_topic" && (
-          <p className="mt-1 text-xs text-muted-foreground">💬 来源：反馈主题</p>
-        )}
-      </div>
-
-      <div className="rounded-lg border border-border bg-card p-5">
-        <div className="prose prose-sm max-w-none whitespace-pre-wrap">{d.content}</div>
-      </div>
-
-      <CopyButton text={d.content} />
+      <RequirementEditor requirement={d} deleted={d.deleted_at !== null} />
     </div>
   );
 }
