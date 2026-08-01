@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createFeedbackAnalysis } from "../actions";
 import { getCurrentProjectIdClient } from "@/lib/current-project-client";
+import { track } from "@/lib/analytics";
 
 export default function NewFeedbackPage() {
   const router = useRouter();
@@ -31,6 +32,8 @@ export default function NewFeedbackPage() {
       setError(result.error);
       return;
     }
+    const count = rawText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0).length;
+    await track("feedback_analysis_started", { analysisId: result.analysisId, count });
     router.push(`/dashboard/feedback/${result.analysisId}`);
   }
 

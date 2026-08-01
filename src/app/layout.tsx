@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AnalyticsBootstrap } from "@/components/analytics-bootstrap";
 
 export const metadata: Metadata = {
   title: "需求桥 RequirementBridge",
@@ -13,7 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <AnalyticsBootstrap />
+        {children}
+      </body>
     </html>
   );
 }
