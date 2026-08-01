@@ -1,0 +1,25 @@
+{
+  "name": "api_eval",
+  "description": "API 草稿生成评测集（对应 SOW §6.2 模块二）",
+  "samples": [
+    {
+      "id": "a1",
+      "input": "实现用户注册接口，接收邮箱和密码，校验邮箱唯一性后创建账户，返回用户信息和 JWT token。密码需加密存储。",
+      "expected": {
+        "mustHaveOpenapi": true,
+        "mustHavePaths": true,
+        "mustHaveErrorCodes": ["400", "401", "404", "500"],
+        "mustHaveSchemas": true
+      }
+    },
+    {
+      "id": "a2",
+      "input": "实现商品列表查询接口，支持按分类筛选、分页、排序，返回商品列表和总数。",
+      "expected": {
+        "mustHaveOpenapi": true,
+        "mustHavePaths": true,
+        "mustHaveErrorCodes": ["400", "401", "404", "500"]
+      }
+    }
+  ]
+}

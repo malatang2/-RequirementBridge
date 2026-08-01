@@ -15,16 +15,15 @@ import { dashscopeChat, corsHeaders } from "../_shared/supabase.ts";
 
 const OPENAPI_SYSTEM_PROMPT = `你是 OpenAPI 3.0 接口设计专家。根据业务需求生成规范的 OpenAPI 3.0 YAML。
 
-强制约束：
-1. 输出合法的 OpenAPI 3.0 YAML（以 openapi: 3.0.x 开头）
-2. 所有字段命名使用 camelCase（如 userName、accessToken，禁止 user_name / UserName）
-3. 每个 path 的每个操作必须包含 400、401、404、500 四个错误响应
-4. 包含 components/schemas 定义数据模型
+绝对强制的约束（违反即不合格）：
+1. 第一行必须是 openapi: 3.0.x（如 openapi: 3.0.0）
+2. 所有字段命名 camelCase（禁止 user_name 等 snake_case）
+3. 每个 path 的每个操作（get/post/put/delete）的 responses 必须同时包含这四个错误码：'400'、'401'、'404'、'500'，一个都不能少
+4. 包含 components/schemas 定义所有数据模型
 5. 包含合理的安全定义（如 Bearer 认证）
 6. 路径用 /api/v1/ 前缀，RESTful 风格
 7. 遵循用户提供的 API 规范上下文（如有）
-
-直接输出 YAML，不要 markdown 代码块包裹，不要解释。`;
+8. 不要用 markdown 代码块包裹，直接输出纯 YAML`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {

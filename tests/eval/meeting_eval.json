@@ -1,0 +1,28 @@
+{
+  "name": "meeting_eval",
+  "description": "会议结构化提取评测集（对应 SOW §6.2 模块一）",
+  "samples": [
+    {
+      "id": "m1",
+      "input": "今天产品周会。第一，决定下周三正式上线支付模块，张三负责联调。第二，需要优化登录页加载速度，优先级高，李四跟进。第三，数据导出的权限设计还有遗留问题，需要和法律确认。第四，新增批量导入用户的需求，王五评估工作量。",
+      "expected": {
+        "itemCountMin": 4,
+        "categories": ["decision", "todo", "issue", "requirement"],
+        "mustContainKeywords": {
+          "decision": ["支付", "上线"],
+          "todo": ["登录", "优化"],
+          "issue": ["权限", "遗留"],
+          "requirement": ["批量", "导入"]
+        }
+      }
+    },
+    {
+      "id": "m2",
+      "input": "运营会议纪要。市场部决定 8 月投放预算 50 万，赵六负责执行。技术部反馈服务器成本超支，是个遗留问题。产品提出了优化搜索结果排序的需求。孙七要在周五前完成投放素材。",
+      "expected": {
+        "itemCountMin": 4,
+        "categories": ["decision", "todo", "issue", "requirement"]
+      }
+    }
+  ]
+}

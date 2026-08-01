@@ -86,6 +86,10 @@ export async function createFeedbackAnalysis(
       .eq("id", analysis.id);
   }
 
+  // PostHog 埋点（T4.2）
+  const { track } = await import("@/lib/analytics");
+  await track("feedback_analysis_started", { analysisId: analysis.id, count: validation.items.length });
+
   revalidatePath("/dashboard/feedback");
   return { ok: true, analysisId: analysis.id };
 }

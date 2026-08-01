@@ -84,6 +84,10 @@ export async function createTextMeeting(
       .eq("id", meeting.id);
   }
 
+  // PostHog 埋点（T4.2）
+  const { track } = await import("@/lib/analytics");
+  await track("meeting_created", { meetingId: meeting.id, mode: "text" });
+
   revalidatePath("/dashboard/meetings");
   return { ok: true, meetingId: meeting.id };
 }

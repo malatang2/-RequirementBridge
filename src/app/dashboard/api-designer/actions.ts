@@ -76,6 +76,10 @@ export async function createApiDraft(
       .eq("id", draft.id);
   }
 
+  // PostHog 埋点（T4.2）
+  const { track } = await import("@/lib/analytics");
+  await track("api_generation_started", { draftId: draft.id });
+
   revalidatePath("/dashboard/api-designer");
   return { ok: true, draftId: draft.id };
 }
