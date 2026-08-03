@@ -60,7 +60,7 @@ export default async function ApiDesignerPage({
   if (sourceIds.length > 0) {
     const { data: reqData } = await supabase
       .from("requirement_drafts")
-      .select("id, title, lifecycle, priority, deleted_at")
+      .select("id, title, lifecycle, priority")
       .in("id", sourceIds)
       .is("deleted_at", null)
       // 排序复用 listRequirements（actions.ts）：lifecycle asc → priority asc → updated_at desc，
@@ -68,7 +68,7 @@ export default async function ApiDesignerPage({
       .order("lifecycle", { ascending: true })
       .order("priority", { ascending: true })
       .order("updated_at", { ascending: false });
-    const reqs = (reqData as Pick<RequirementDraft, "id" | "title" | "lifecycle" | "priority" | "deleted_at">[] | null) ?? [];
+    const reqs = (reqData as Pick<RequirementDraft, "id" | "title" | "lifecycle" | "priority">[] | null) ?? [];
     requirements = reqs.map((r) => ({
       id: r.id,
       title: r.title,

@@ -19,6 +19,7 @@ import { useEffect, useState, useTransition } from "react";
 import yaml from "js-yaml";
 import {
   API_STATUS_META,
+  draftOriginLabel,
   extractFirstPathMethod,
   groupApiDraftsByRequirement,
 } from "@/lib/api-designer";
@@ -208,7 +209,7 @@ function GroupedView({
             <ul className="divide-y divide-border">
               {g.drafts.map((d) => (
                 <li key={d.id}>
-                  <GroupedDraftRow draft={d} />
+                  <GroupedDraftRow draft={d} isUnattached={isUnattached} />
                 </li>
               ))}
             </ul>
@@ -220,14 +221,21 @@ function GroupedView({
 }
 
 /**
- * 组内单行：从 current_yaml 解析出首个 path + method，origin 由 source_requirement_id 推断。
- * YAML 解析放客户端（仅分组视图用到，避免污染列表首屏 bundle——js-yaml 动态解析缓存）。
+ * 组内单行：从 current_yaml 解析出首个 path + method；origin 标签仅在未归属组渲染
+ * （命名组里组头已标需求，origin 是冗余信息）。origin 文案由 draftOriginLabel 决定：
+ * 未归属 + null id → 自由创建；未归属 + 非 null id → 原属需求已删除（orphan）。
+ * YAML 解析放客户端：仅分组视图用到，用 useState/useEffect 在挂载后解析（SSR 返回 null）。
  */
-function GroupedDraftRow({ draft }: { draft: ApiDraft }) {
+function GroupedDraftRow({
+  draft,
+  isUnattached,
+}: {
+  draft: ApiDraft;
+  isUnattached: boolean;
+}) {
   const meta = API_STATUS_META[draft.status];
   const endpoint = useFirstEndpoint(draft.current_yaml);
-  // origin：source_requirement_id 非空 = 来自需求；null = 自由创建
-  const originLabel = draft.source_requirement_id ? "来自需求" : "自由创建";
+  const originLabel = draftOriginLabel(isUnattached, draft.source_requirement_id);
 
   return (
     <Link
@@ -249,7 +257,9 @@ function GroupedDraftRow({ draft }: { draft: ApiDraft }) {
               {draft.current_yaml ? "解析中…" : "无 YAML"}
             </span>
           )}
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">{originLabel}</span>
+          {originLabel && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">{originLabel}</span>
+          )}
         </div>
       </div>
       <span className={`shrink-0 text-xs font-medium ${meta.color}`}>{meta.label}</span>

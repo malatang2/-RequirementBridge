@@ -9,6 +9,7 @@ import {
   nextVersionNumber,
   groupApiDraftsByRequirement,
   extractFirstPathMethod,
+  draftOriginLabel,
   REQUIRED_ERROR_CODES,
 } from "@/lib/api-designer";
 import type { ApiDraft, RequirementDraft } from "@/types/database";
@@ -471,5 +472,26 @@ describe("extractFirstPathMethod", () => {
     expect(extractFirstPathMethod(null)).toBeNull();
     expect(extractFirstPathMethod("yaml string")).toBeNull();
     expect(extractFirstPathMethod(undefined)).toBeNull();
+  });
+});
+
+// ============ seam 8：draftOriginLabel（07 工单）============
+
+describe("draftOriginLabel", () => {
+  it("命名组内返回 null（组头已标需求，origin 冗余）", () => {
+    expect(draftOriginLabel(false, "r1")).toBeNull();
+  });
+
+  it("命名组内即使 source_requirement_id 为空也返回 null", () => {
+    // 防御：命名组里按定义 source_requirement_id 必非空，但函数不假设这一点
+    expect(draftOriginLabel(false, null)).toBeNull();
+  });
+
+  it("未归属组 + source_requirement_id 为空 → 自由创建", () => {
+    expect(draftOriginLabel(true, null)).toBe("自由创建");
+  });
+
+  it("未归属组 + source_requirement_id 非空 → 原属需求已删除（orphan）", () => {
+    expect(draftOriginLabel(true, "r_ghost")).toBe("原属需求已删除");
   });
 });

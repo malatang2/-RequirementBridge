@@ -327,6 +327,27 @@ export function groupApiDraftsByRequirement(
   return groups;
 }
 
+// ============ seam 8：组内草稿的 origin 标签（07 工单）============
+
+/**
+ * 分组视图里单条草稿的 origin 标签文案。
+ *
+ * 三态（与 groupApiDraftsByRequirement 的分组语义对齐）：
+ * - 命名组内：组头已标需求，origin 是冗余信息——返回 null（调用方不渲染标签）
+ * - 未归属组 + source_requirement_id 为空：纯自由创建 → "自由创建"
+ * - 未归属组 + source_requirement_id 非空：关联的需求已被软删/跨项目
+ *   （groupApiDraftsByRequirement 解析不到对应需求才落到未归属组）→ "原属需求已删除"
+ *
+ * 纯函数：便于单测；UI 只负责传入 isUnattached + source_requirement_id。
+ */
+export function draftOriginLabel(
+  isUnattached: boolean,
+  source_requirement_id: string | null
+): string | null {
+  if (!isUnattached) return null;
+  return source_requirement_id === null ? "自由创建" : "原属需求已删除";
+}
+
 // ============ seam 7：从 OpenAPI 文档提取首个 path + method（07 工单）============
 
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
