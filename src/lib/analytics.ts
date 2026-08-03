@@ -8,6 +8,7 @@
  * - meeting_created / analysis_completed / item_edited
  * - api_generation_completed / api_spec_edited / api_version_saved
  * - feedback_analysis_completed / topic_merged / requirement_draft_generated
+ * - requirement_confirmed（04 工单：PM 确认 draft 进 backlog，v2 北极星指标）
  */
 
 import type { PostHog } from "posthog-js";

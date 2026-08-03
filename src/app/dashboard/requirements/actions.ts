@@ -10,7 +10,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseActionClient } from "@/lib/supabase/action-client";
-import { validateRequirementInput } from "@/lib/requirements";
+import { validateRequirementInput, describeTransition } from "@/lib/requirements";
 import type {
   PriorityLevel,
   RequirementDraft,
@@ -151,5 +151,60 @@ export async function deleteRequirement(id: string): Promise<RequirementActionRe
   }
 
   revalidatePath("/dashboard/requirements");
+  return { ok: true, requirement: data as RequirementDraft };
+}
+
+/**
+ * Confirm 关卡：把 draft Requirement 推进到 confirmed（04 工单）。
+ *
+ * 业务意图（CONTEXT.md / Confirm 定义）：把 Requirement 从 draft 推进到
+ * confirmed 的人工动作——只有经过 PM 拍板的才进 backlog。与 ADR-0002 的
+ * 信号降噪精神一致（ADR-0002 把关「聚类后进 draft」，本关卡把关「draft 进 backlog」，
+ * 是同一降噪链路上 draft 之后的那道闸）。本 action 只做 draft→confirmed 这一条
+ * 流转（UI 唯一对应按钮）。
+ *
+ * 鉴权靠 RLS（user_id = auth.uid()），canTransition 把关非法流转
+ * （如 delivered→draft、跨级跳跃、自环都会被拒）。
+ *
+ * 埋点说明：requirement_confirmed 的 track() 调用在客户端 RequirementEditor
+ * 的 onClick 成功回调里（server 端 track 为 no-op，详见 analytics.ts）。
+ */
+export async function confirmRequirement(
+  id: string
+): Promise<RequirementActionResult> {
+  const supabase = await createSupabaseActionClient();
+
+  // 1. 读出当前 lifecycle，用纯函数把关流转合法性
+  const { data: current, error: selectError } = await supabase
+    .from("requirement_drafts")
+    .select("id, lifecycle, source_type, project_id")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (selectError || !current) {
+    return { ok: false, error: "需求不存在或已被删除" };
+  }
+
+  const from = current.lifecycle as RequirementLifecycle;
+  const check = describeTransition(from, "confirmed");
+  if (!check.ok) {
+    return { ok: false, error: check.error };
+  }
+
+  // 2. 更新 lifecycle
+  const { data, error } = await supabase
+    .from("requirement_drafts")
+    .update({ lifecycle: "confirmed" })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error || !data) {
+    return { ok: false, error: "确认需求失败，请重试" };
+  }
+
+  revalidatePath("/dashboard/requirements");
+  revalidatePath(`/dashboard/requirements/${id}`);
   return { ok: true, requirement: data as RequirementDraft };
 }
