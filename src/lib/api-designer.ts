@@ -12,7 +12,7 @@
  * 服务端 swagger-parser 权威校验双层分工。
  */
 
-import type { GenStatus } from "@/types/database";
+import type { GenStatus, ApiDraft } from "@/types/database";
 
 /** 必填错误码（每个 path 至少含这四个，验收门槛 100%） */
 export const REQUIRED_ERROR_CODES = ["400", "401", "404", "500"] as const;
@@ -253,3 +253,74 @@ export const API_STATUS_META: Record<ApiGenStatus, { label: string; color: strin
   completed: { label: "完成", color: "text-green-600" },
   failed: { label: "失败", color: "text-red-600" },
 };
+
+// ============ seam 6：按 Requirement 分组 API 草稿（07 工单）============
+
+/**
+ * Requirement 元信息投影——只取分组视图需要的字段。
+ * 故意不直接复用 RequirementDraft，避免把整个实体塞进纯函数的输入
+ * （requirements 由调用方批量查好后传入，可能来自 select 子集）。
+ */
+export interface RequirementProjection {
+  id: string;
+  title: string;
+  lifecycle: string;
+  priority: string;
+}
+
+/** 分组结果：有归属（按需求聚合）+ 未归属组（requirement === null，恒在最后） */
+export interface ApiDraftGroup {
+  requirement: RequirementProjection | null;
+  drafts: ApiDraft[];
+}
+
+/**
+ * 把 API 草稿按 source_requirement_id 分组。
+ * - 有 source_requirement_id 且能在 requirements 里找到对应需求的 → 归到该需求组
+ * - 没关联（null）或关联的需求不在 requirements 列表里（被软删/跨项目）→ 归「未归属」组
+ *
+ * 纯函数，不查 DB——requirements 由调用方先查好传入，避免 N+1。
+ * 分组顺序：按 requirements 传入顺序（调用方排序后传入），未归属组恒在最后。
+ * 组内 drafts 顺序保持传入顺序（页面查询时已 order by created_at desc）。
+ */
+export function groupApiDraftsByRequirement<
+  T extends { source_requirement_id: string | null },
+>(
+  drafts: T[],
+  requirements: RequirementProjection[]
+): (Omit<ApiDraftGroup, "drafts"> & { drafts: T[] })[] {
+  const reqMap = new Map(requirements.map((r) => [r.id, r]));
+  const grouped = new Map<string, T[]>();
+  const unattached: T[] = [];
+
+  for (const d of drafts) {
+    const rid = d.source_requirement_id;
+    if (rid && reqMap.has(rid)) {
+      const arr = grouped.get(rid) ?? [];
+      arr.push(d);
+      grouped.set(rid, arr);
+    } else {
+      unattached.push(d);
+    }
+  }
+
+  const groups: (Omit<ApiDraftGroup, "drafts"> & { drafts: T[] })[] =
+    Array.from(grouped.entries()).map(([rid, ds]) => {
+      const r = reqMap.get(rid)!;
+      return {
+        requirement: {
+          id: r.id,
+          title: r.title,
+          lifecycle: r.lifecycle,
+          priority: r.priority,
+        },
+        drafts: ds,
+      };
+    });
+
+  // 未归属组恒在最后；空时不出现（避免空「未归属」组干扰 UI）
+  if (unattached.length > 0) {
+    groups.push({ requirement: null, drafts: unattached });
+  }
+  return groups;
+}

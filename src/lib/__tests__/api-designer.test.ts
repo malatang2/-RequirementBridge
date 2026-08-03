@@ -7,8 +7,10 @@ import {
   checkErrorCodes,
   analyzeOpenApiDoc,
   nextVersionNumber,
+  groupApiDraftsByRequirement,
   REQUIRED_ERROR_CODES,
 } from "@/lib/api-designer";
+import type { ApiDraft, RequirementDraft } from "@/types/database";
 
 describe("validateApiInput", () => {
   it("接受有效输入并 trim", () => {
@@ -261,5 +263,152 @@ describe("nextVersionNumber", () => {
 
   it("单个版本 +1", () => {
     expect(nextVersionNumber([{ version_number: 5 }])).toBe(6);
+  });
+});
+
+// ============ seam 6：按 Requirement 分组 API 草稿（07 工单）============
+
+/** 构造最小可测 ApiDraft（只填分组关心的字段） */
+function makeDraft(
+  id: string,
+  source_requirement_id: string | null,
+  extra: Partial<ApiDraft> = {}
+): ApiDraft {
+  return {
+    id,
+    user_id: "u1",
+    project_id: "p1",
+    title: `API ${id}`,
+    business_requirement: "br",
+    api_spec_context: null,
+    current_yaml: null,
+    current_version_id: null,
+    status: "completed",
+    error_message: null,
+    is_edited: false,
+    source_requirement_id,
+    llm_usage: null,
+    completed_at: null,
+    created_at: "2026-08-03T00:00:00Z",
+    updated_at: "2026-08-03T00:00:00Z",
+    ...extra,
+  };
+}
+
+/** 构造最小可测 RequirementDraft */
+function makeRequirement(
+  id: string,
+  extra: Partial<RequirementDraft> = {}
+): RequirementDraft {
+  return {
+    id,
+    user_id: "u1",
+    project_id: "p1",
+    source_type: "manual",
+    source_topic_id: null,
+    source_meeting_item_id: null,
+    title: `需求 ${id}`,
+    content: "c",
+    status: "completed",
+    priority: "medium",
+    lifecycle: "confirmed",
+    is_edited: false,
+    deleted_at: null,
+    created_at: "2026-08-03T00:00:00Z",
+    updated_at: "2026-08-03T00:00:00Z",
+    ...extra,
+  };
+}
+
+describe("groupApiDraftsByRequirement", () => {
+  it("有归属：把带 source_requirement_id 的草稿归入对应需求组", () => {
+    const drafts = [makeDraft("a1", "r1"), makeDraft("a2", "r2")];
+    const requirements = [makeRequirement("r1"), makeRequirement("r2")];
+
+    const groups = groupApiDraftsByRequirement(drafts, requirements);
+
+    expect(groups).toHaveLength(2);
+    // 都应有归属
+    expect(groups.every((g) => g.requirement !== null)).toBe(true);
+    // 找到 r1 组
+    const g1 = groups.find((g) => g.requirement?.id === "r1");
+    expect(g1?.drafts.map((d) => d.id)).toEqual(["a1"]);
+    expect(g1?.requirement?.title).toBe("需求 r1");
+  });
+
+  it("无归属：source_requirement_id 为空的草稿归入「未归属」组（在最后）", () => {
+    const drafts = [makeDraft("a1", null), makeDraft("a2", null)];
+    const requirements: RequirementDraft[] = [];
+
+    const groups = groupApiDraftsByRequirement(drafts, requirements);
+
+    expect(groups).toHaveLength(1);
+    const last = groups[groups.length - 1];
+    expect(last.requirement).toBeNull();
+    expect(last.drafts.map((d) => d.id)).toEqual(["a1", "a2"]);
+  });
+
+  it("多接口同需求：同一 source_requirement_id 的多个草稿并入同一组", () => {
+    const drafts = [
+      makeDraft("a1", "r1"),
+      makeDraft("a2", "r1"),
+      makeDraft("a3", "r1"),
+    ];
+    const requirements = [makeRequirement("r1")];
+
+    const groups = groupApiDraftsByRequirement(drafts, requirements);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].drafts.map((d) => d.id)).toEqual(["a1", "a2", "a3"]);
+  });
+
+  it("单接口单需求：一个草稿一个需求的最小场景", () => {
+    const drafts = [makeDraft("a1", "r1")];
+    const requirements = [makeRequirement("r1")];
+
+    const groups = groupApiDraftsByRequirement(drafts, requirements);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].requirement?.id).toBe("r1");
+    expect(groups[0].drafts).toHaveLength(1);
+  });
+
+  it("孤儿 source_requirement_id（需求被软删/跨项目）归入「未归属」而非报错", () => {
+    // 草稿指向 r_orphan，但 requirements 列表里没有（被删/跨项目）
+    const drafts = [
+      makeDraft("a1", "r_real"),
+      makeDraft("a2", "r_orphan"),
+    ];
+    const requirements = [makeRequirement("r_real")];
+
+    const groups = groupApiDraftsByRequirement(drafts, requirements);
+
+    // r_real 组 + 未归属组
+    expect(groups).toHaveLength(2);
+    const unattached = groups[groups.length - 1];
+    expect(unattached.requirement).toBeNull();
+    expect(unattached.drafts.map((d) => d.id)).toEqual(["a2"]);
+  });
+
+  it("混合场景：归属组在前、未归属组恒在最后", () => {
+    const drafts = [
+      makeDraft("a_unattached", null),
+      makeDraft("a_r1", "r1"),
+      makeDraft("a_orphan", "r_ghost"),
+      makeDraft("a_r2", "r2"),
+    ];
+    const requirements = [makeRequirement("r1"), makeRequirement("r2")];
+
+    const groups = groupApiDraftsByRequirement(drafts, requirements);
+
+    // 两个归属组 + 一个未归属组
+    expect(groups).toHaveLength(3);
+    // 最后一组恒为未归属
+    expect(groups[groups.length - 1].requirement).toBeNull();
+    expect(groups[groups.length - 1].drafts.map((d) => d.id)).toEqual(["a_unattached", "a_orphan"]);
+  });
+
+  it("空 drafts 返回空数组（不出「未归属」空组）", () => {
+    expect(groupApiDraftsByRequirement([], [])).toEqual([]);
   });
 });
