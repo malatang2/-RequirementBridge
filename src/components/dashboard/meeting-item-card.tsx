@@ -1,12 +1,23 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { updateMeetingItem, deleteMeetingItem } from "@/app/dashboard/meetings/actions";
+import { transferMeetingItemsToFeedback } from "@/app/dashboard/feedback/actions";
+import { getCurrentProjectIdClient } from "@/lib/current-project-client";
+import { track } from "@/lib/analytics";
 import type { MeetingItem } from "@/types/database";
 import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/lib/meetings";
 
 interface Props {
   item: MeetingItem;
+  /**
+   * 该条目对应的 feedback_analysis id（仅 transferred_to_feedback=true 时非空）。
+   * 由会议详情页 server component 反查 feedback_items.source_meta 得到，
+   * 用于"已转入反馈 →"角标深链。null 表示未转入或反查未命中。
+   */
+  analysisId?: string;
 }
 
 const PRIORITIES = [
@@ -15,13 +26,15 @@ const PRIORITIES = [
   { value: "low", label: "低" },
 ] as const;
 
-export function MeetingItemCard({ item }: Props) {
+export function MeetingItemCard({ item, analysisId }: Props) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [content, setContent] = useState(item.content);
   const [assignee, setAssignee] = useState(item.assignee ?? "");
   const [priority, setPriority] = useState(item.priority);
   const [category, setCategory] = useState(item.category);
   const [error, setError] = useState<string | null>(null);
+  const [transferError, setTransferError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
@@ -42,6 +55,35 @@ export function MeetingItemCard({ item }: Props) {
     if (!confirm("确认删除这条条目？")) return;
     startTransition(async () => {
       await deleteMeetingItem(item.id);
+    });
+  }
+
+  /**
+   * 单条转反馈（仅 issue 类显示入口）。
+   * 走与批量相同的 transferMeetingItemsToFeedback action（itemId 数组长度为 1），
+   * 服务端 filterTransferableItems 会再次校验 ADR-0002 约束（issue-only + 未转入）。
+   */
+  function handleTransferSingle() {
+    setTransferError(null);
+    if (!confirm("确认将这条 issue 转入反馈聚类？\n将进入反馈模块参与聚类，聚类后可能被合并/重命名，原条目保留不动。")) {
+      return;
+    }
+    startTransition(async () => {
+      const projectId = await getCurrentProjectIdClient();
+      if (!projectId) {
+        setTransferError("未检测到当前项目");
+        return;
+      }
+      const r = await transferMeetingItemsToFeedback(projectId, item.meeting_id, [item.id]);
+      if (!r.ok) {
+        setTransferError(r.error);
+        return;
+      }
+      await track("meeting_feedback_transferred", {
+        meeting_id: item.meeting_id,
+        item_count: 1,
+      });
+      router.refresh();
     });
   }
 
@@ -120,6 +162,18 @@ export function MeetingItemCard({ item }: Props) {
       <div className="mt-1.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span>负责人：{item.assignee ?? "待分配"}</span>
         <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {/* 单条转反馈入口：仅 issue + 未转入显示（ADR-0002 只转 issue） */}
+          {item.category === "issue" && !item.transferred_to_feedback && (
+            <button
+              type="button"
+              onClick={handleTransferSingle}
+              disabled={isPending}
+              className="rounded px-1.5 py-0.5 text-blue-600 hover:bg-blue-500/10 disabled:opacity-50"
+              title="转入反馈模块参与 AI 聚类"
+            >
+              转反馈
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setEditing(true)}
@@ -144,10 +198,31 @@ export function MeetingItemCard({ item }: Props) {
           )}
         </p>
       )}
-      {item.is_manual && (
-        <span className="mt-1 inline-block rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
-          手动新增
-        </span>
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        {item.is_manual && (
+          <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+            手动新增
+          </span>
+        )}
+        {/* 溯源角标：已转入反馈，深链到对应 analysis 详情 */}
+        {item.transferred_to_feedback && (
+          analysisId ? (
+            <Link
+              href={`/dashboard/feedback/${analysisId}`}
+              className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+              title="查看转入的反馈分析"
+            >
+              已转入反馈 →
+            </Link>
+          ) : (
+            <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+              已转入反馈
+            </span>
+          )
+        )}
+      </div>
+      {transferError && (
+        <p className="mt-1 text-xs text-destructive">{transferError}</p>
       )}
     </div>
   );

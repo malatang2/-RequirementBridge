@@ -12,6 +12,7 @@ import { MeetingDetailClient } from "./detail-client";
 import { MeetingItemCard } from "@/components/dashboard/meeting-item-card";
 import { AddItemInline } from "@/components/dashboard/add-item-inline";
 import { MeetingExportBar } from "@/components/dashboard/meeting-export-bar";
+import { MeetingBatchTransferButton } from "@/components/dashboard/meeting-batch-transfer-button";
 
 export default async function MeetingDetailPage({
   params,
@@ -39,6 +40,32 @@ export default async function MeetingDetailPage({
   const items = (itemsData as MeetingItem[]) ?? [];
   const grouped = groupItemsByCategory(items);
   const isCompleted = meeting_.status === "completed";
+
+  // 反查 meeting_item_id → analysis_id 映射（06 工单）
+  // 查 feedback_items 中 source_type='meeting' 且本会议的条目，
+  // 用于已转入条目显示"已转入反馈 →"角标深链到对应 analysis 详情页。
+  // ADR-0002：source_meta 是出身溯源链接（非同步契约），此处只读不写。
+  const itemIdToAnalysisId = new Map<string, string>();
+  if (isCompleted) {
+    const { data: linkedFeedbackItems } = await supabase
+      .from("feedback_items")
+      .select("id, analysis_id, source_meta")
+      .eq("source_type", "meeting");
+    for (const fi of (linkedFeedbackItems ?? []) as Array<{
+      id: string;
+      analysis_id: string;
+      source_meta: Record<string, unknown> | null;
+    }>) {
+      const meta = fi.source_meta;
+      if (meta && typeof meta === "object" && meta.meeting_id === meetingId) {
+        const itemId = meta.meeting_item_id;
+        if (typeof itemId === "string") {
+          // 同一 meeting_item 理论上只转入一次（防重复转入），后写入覆盖前者
+          itemIdToAnalysisId.set(itemId, fi.analysis_id);
+        }
+      }
+    }
+  }
 
   const exportData: MeetingExportData = {
     title: meeting_.title,
@@ -106,10 +133,21 @@ export default async function MeetingDetailPage({
                   <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                     {list.length}
                   </span>
+                  {/* issue 分组：批量转反馈入口（06 工单，ADR-0002 只转 issue） */}
+                  {cat === "issue" && list.length > 0 && (
+                    <MeetingBatchTransferButton
+                      meetingId={meeting_.id}
+                      issueItems={list}
+                    />
+                  )}
                 </h2>
                 <div className="space-y-2">
                   {list.map((item) => (
-                    <MeetingItemCard key={item.id} item={item} />
+                    <MeetingItemCard
+                      key={item.id}
+                      item={item}
+                      analysisId={itemIdToAnalysisId.get(item.id)}
+                    />
                   ))}
                   <AddItemInline meetingId={meeting_.id} category={cat} />
                 </div>

@@ -8,6 +8,8 @@ import {
   verifyFrequencyConsistency,
   pickSampleFeedback,
   computeSentimentDistribution,
+  filterTransferableItems,
+  type TransferableMeetingItem,
 } from "@/lib/feedback";
 
 describe("validateFeedbackInput", () => {
@@ -239,5 +241,76 @@ describe("computeSentimentDistribution", () => {
       negative: 0,
       neutral: 2,
     });
+  });
+});
+
+// ============ seam 7：会议 issue 条目转入反馈校验（06 工单） ============
+
+describe("filterTransferableItems", () => {
+  // ADR-0002 三条硬约束之一：只转 category='issue'
+  // 另：transferred_to_feedback=true 不再可转（防重复转入）
+  // 另：必须本会议的条目（meeting_id 匹配）
+  // 另：内容非空（聚类无意义的空条目跳过）
+
+  const baseItem = (over: Partial<TransferableMeetingItem>): TransferableMeetingItem => ({
+    id: "i1",
+    meeting_id: "m1",
+    category: "issue",
+    content: "登录失败",
+    transferred_to_feedback: false,
+    ...over,
+  });
+
+  it("只保留 issue + 未转入的条目", () => {
+    const items = [
+      baseItem({ id: "i1" }),
+      baseItem({ id: "i2", category: "decision" }),
+      baseItem({ id: "i3", category: "requirement" }),
+      baseItem({ id: "i4", category: "todo" }),
+    ];
+    const r = filterTransferableItems(items, "m1");
+    expect(r.map((x) => x.id)).toEqual(["i1"]);
+  });
+
+  it("排除已转入的条目（防重复转入）", () => {
+    const items = [
+      baseItem({ id: "i1", transferred_to_feedback: true }),
+      baseItem({ id: "i2" }),
+    ];
+    const r = filterTransferableItems(items, "m1");
+    expect(r.map((x) => x.id)).toEqual(["i2"]);
+  });
+
+  it("排除其它会议的条目（meeting_id 不匹配）", () => {
+    const items = [
+      baseItem({ id: "i1", meeting_id: "m1" }),
+      baseItem({ id: "i2", meeting_id: "other" }),
+    ];
+    const r = filterTransferableItems(items, "m1");
+    expect(r.map((x) => x.id)).toEqual(["i1"]);
+  });
+
+  it("排除空内容条目（聚类无意义）", () => {
+    const items = [
+      baseItem({ id: "i1", content: "   " }),
+      baseItem({ id: "i2", content: "" }),
+      baseItem({ id: "i3", content: "有效 issue" }),
+    ];
+    const r = filterTransferableItems(items, "m1");
+    expect(r.map((x) => x.id)).toEqual(["i3"]);
+  });
+
+  it("空数组返回空数组", () => {
+    expect(filterTransferableItems([], "m1")).toEqual([]);
+  });
+
+  it("保留输入顺序（与 action 批量插入顺序一致，EF 按位置回填）", () => {
+    const items = [
+      baseItem({ id: "c" }),
+      baseItem({ id: "a" }),
+      baseItem({ id: "b" }),
+    ];
+    const r = filterTransferableItems(items, "m1");
+    expect(r.map((x) => x.id)).toEqual(["c", "a", "b"]);
   });
 });
