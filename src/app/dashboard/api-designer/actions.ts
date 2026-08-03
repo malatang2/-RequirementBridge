@@ -18,7 +18,12 @@ export type ApiDraftActionResult =
 /** 创建草稿并触发 Qwen 生成 */
 export async function createApiDraft(
   projectId: string,
-  input: { businessRequirement?: unknown; apiSpecContext?: unknown; title?: string }
+  input: {
+    businessRequirement?: unknown;
+    apiSpecContext?: unknown;
+    title?: string;
+    sourceRequirementId?: string;
+  }
 ): Promise<ApiDraftActionResult> {
   const validation = validateApiInput(input);
   if (!validation.ok) return { ok: false, error: validation.error };
@@ -32,6 +37,27 @@ export async function createApiDraft(
 
   const title = (typeof input.title === "string" && input.title.trim()) || "未命名接口";
 
+  // 【05】源需求校验：传入时才校验（跨项目越权防护）。
+  // RLS 只保证 user_id 隔离，但用户可能传别的项目的 requirement_id——
+  // 故显式校验：存在 + 同项目 + lifecycle='confirmed' + 未软删。
+  let sourceRequirementId: string | null = null;
+  if (typeof input.sourceRequirementId === "string" && input.sourceRequirementId) {
+    const { data: srcReq } = await supabase
+      .from("requirement_drafts")
+      .select("id, project_id, lifecycle, deleted_at")
+      .eq("id", input.sourceRequirementId)
+      .maybeSingle();
+    if (
+      !srcReq ||
+      srcReq.project_id !== projectId ||
+      srcReq.lifecycle !== "confirmed" ||
+      srcReq.deleted_at !== null
+    ) {
+      return { ok: false, error: "源需求无效或未确认" };
+    }
+    sourceRequirementId = srcReq.id;
+  }
+
   const { data: draft, error: insertError } = await supabase
     .from("api_drafts")
     .insert({
@@ -41,6 +67,7 @@ export async function createApiDraft(
       business_requirement: validation.businessRequirement,
       api_spec_context: validation.apiSpecContext,
       status: "generating",
+      source_requirement_id: sourceRequirementId,
     })
     .select()
     .single();

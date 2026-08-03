@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { updateRequirement, deleteRequirement, confirmRequirement } from "@/app/dashboard/requirements/actions";
 import { LIFECYCLE_LABELS, resolveSourceLabel } from "@/lib/requirements";
@@ -30,6 +31,7 @@ const PRIORITY_COLOR: Record<string, string> = {
  * 由详情 Server Component 注入 requirement 数据；本组件负责编辑/软删除的人机交互。
  */
 export function RequirementEditor({ requirement, deleted }: Props) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(requirement.title);
   const [content, setContent] = useState(requirement.content);
@@ -184,6 +186,32 @@ export function RequirementEditor({ requirement, deleted }: Props) {
             className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {isPending ? "确认中…" : "确认纳入需求池"}
+          </button>
+        )}
+        {/*
+          05 工单：生成 API 草稿入口 A。
+          仅 confirmed 可点 → 跳 API 设计器新建页（带 requirementId 预填 title + business_requirement）；
+          非 confirmed 置灰 + tooltip "请先确认需求"。
+          纯跳转（router.push），不调 server action——提交由新建页表单触发 createApiDraft。
+        */}
+        {requirement.lifecycle === "confirmed" ? (
+          <button
+            type="button"
+            onClick={() =>
+              router.push(`/dashboard/api-designer/new?requirementId=${requirement.id}`)
+            }
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            生成 API 草稿
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled
+            title="请先确认需求"
+            className="cursor-not-allowed rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground"
+          >
+            生成 API 草稿
           </button>
         )}
         <div className="flex-1" />
