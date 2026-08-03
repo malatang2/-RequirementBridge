@@ -137,10 +137,6 @@ async function cleanupRB08() {
   await req(`/rest/v1/meetings?title=like.*${RB08}*`, "DELETE", headers);
 }
 
-/**
- * Phase 1 新增 4 个集成 check（编号 11-14）。
- * @param {{userIdA:string, userIdB:string, projectId:string, tokenA:string, tokenB:string}} ctx
- */
 // 从 JWT 里解出 user_id（sub claim）。本项目的所有业务表的 insert RLS policy
 // 是 `with check (user_id = auth.uid())`——PostgREST 不会自动把 auth.uid() 填进
 // 插入行，所以 anon+access_token 会话写库时，必须在 body 里显式带上 user_id
@@ -149,6 +145,11 @@ async function cleanupRB08() {
 const decodeUid = (tok) =>
   JSON.parse(Buffer.from(tok.split(".")[1], "base64").toString()).sub;
 
+/**
+ * Phase 1 新增 4 个集成 check（编号 11-14）。
+ * @param {{userIdA:string, userIdB:string, projectId:string, tokenA:string, tokenB:string}} ctx
+ *   ctx 同时作为跨 check 传递植入门点的载体（如 ctx.aRequirementId 供 check 13 复用）。
+ */
 async function runPhase1Checks({ userIdA, userIdB, projectId, tokenA, tokenB }) {
   console.log("\n【3】Phase 1 集成 check（11-14：CRUD RLS / 会议转入 / 需求→API / 软删）");
 
@@ -185,6 +186,18 @@ async function runPhase1Checks({ userIdA, userIdB, projectId, tokenA, tokenB }) 
     });
     const rowB = JSON.parse(insB.body)?.[0];
     const bId = rowB?.id;
+    // 前置守卫：B 必须先成功写进一行，后续 11a/b/c 才有意义。
+    // 否则若 B 的 insert 静默失败（token 过期 / 网络 / RLS 回归），bId=undefined，
+    // 下面 `id=eq.undefined` 会匹配 0 行 → 11a/b/c 全部假绿。这里先卡死。
+    if (!bId) {
+      check("11 前置：B 成功写入一行 requirement（否则后续 RLS 断言无意义）",
+        false, `(insB.status=${insB.status}, body=${insB.body?.slice(0, 120)})`);
+      // 不 return —— 仍跑剩余 check，但它们会因 bId=undefined 各自失败/记录，
+      // 比"静默全绿"更诚实。
+    } else {
+      check("11 前置：B 成功写入一行 requirement（否则后续 RLS 断言无意义）",
+        true, `(bId=${bId.slice(0, 8)})`);
+    }
 
     // A 列表查询：标题精确过滤 + 期望 RLS 把 B 的行过滤掉
     const listRes = await req(
@@ -195,11 +208,12 @@ async function runPhase1Checks({ userIdA, userIdB, projectId, tokenA, tokenB }) 
     const list = JSON.parse(listRes.body);
     check(
       "11a Requirement 跨用户 RLS：A 列表看不到 B 的需求",
-      Array.isArray(list) && list.length === 0,
-      `(A 看见 ${Array.isArray(list) ? list.length : "?"} 条)`
+      !!bId && Array.isArray(list) && list.length === 0,
+      `(bId=${bId ? "有" : "缺失"}, A 看见 ${Array.isArray(list) ? list.length : "?"} 条)`
     );
 
     // A 改 B 的需求：带 Prefer: return=representation 看返回几行
+    // 注：若 bId 缺失（B 写入失败），不能让"0 行受影响"假绿——必须同时要求 bId 存在。
     const updRes = await req(
       `/rest/v1/requirement_drafts?id=eq.${bId}`,
       "PATCH",
@@ -209,8 +223,8 @@ async function runPhase1Checks({ userIdA, userIdB, projectId, tokenA, tokenB }) 
     const upd = JSON.parse(updRes.body);
     check(
       "11b Requirement 跨用户 RLS：A 改不了 B 的需求（0 行受影响）",
-      Array.isArray(upd) && upd.length === 0,
-      `(受影响 ${Array.isArray(upd) ? upd.length : "?"} 行)`
+      !!bId && Array.isArray(upd) && upd.length === 0,
+      `(bId=${bId ? "有" : "缺失"}, 受影响 ${Array.isArray(upd) ? upd.length : "?"} 行)`
     );
 
     // A 删 B 的需求
@@ -222,8 +236,8 @@ async function runPhase1Checks({ userIdA, userIdB, projectId, tokenA, tokenB }) 
     const del = JSON.parse(delRes.body);
     check(
       "11c Requirement 跨用户 RLS：A 删不了 B 的需求（0 行受影响）",
-      Array.isArray(del) && del.length === 0,
-      `(受影响 ${Array.isArray(del) ? del.length : "?"} 行)`
+      !!bId && Array.isArray(del) && del.length === 0,
+      `(bId=${bId ? "有" : "缺失"}, 受影响 ${Array.isArray(del) ? del.length : "?"} 行)`
     );
 
     // 对照组：A 自己的需求 A 应能查到（证明不是查询本身坏了）
@@ -425,8 +439,8 @@ async function runPhase1Checks({ userIdA, userIdB, projectId, tokenA, tokenB }) 
     const aSeeBArr = JSON.parse(aSeeB.body);
     check(
       "13b 越权防护：A 查不到 B 的 requirement（action .maybeSingle() 将返回 null）",
-      Array.isArray(aSeeBArr) && aSeeBArr.length === 0,
-      `(A 看见 ${Array.isArray(aSeeBArr) ? aSeeBArr.length : "?"} 条)`
+      !!bReqId && Array.isArray(aSeeBArr) && aSeeBArr.length === 0,
+      `(bReqId=${bReqId ? "有" : "缺失"}, A 看见 ${Array.isArray(aSeeBArr) ? aSeeBArr.length : "?"} 条)`
     );
 
     // ③ 越权写入直接被 RLS 拦：A 把 B 的需求 id 作为 source_requirement_id
