@@ -2,17 +2,33 @@
  * 反馈聚类 Edge Function（M3 / T3.2）。
  * 对应《前后端接口契约 §3.2/§3.5》：Qwen-Plus 主题聚类 + 情感 + 频次 + 优先级 + 样本。
  *
- * 输入：{ analysisId, items }
+ * 输入（两种模式二选一）：
+ *   - 粘贴/文件模式：{ analysisId, items: string[] }
+ *   - 会议转入模式（06 工单）：{ analysisId, sourceItems: { content, source_type?, source_meta? }[] }
+ *
+ * EF 不关心 items 的出身——它把任一模式归一化成 clusterItems: string[] 后送 Qwen 聚类，
+ * 再按"analysis_id 下 feedback_items 按 created_at asc 重查"的位置回填 topic_id。
+ * 因此调用方必须保证 sourceItems 的顺序与它自己批量插入 feedback_items 的顺序一致
+ * （transferMeetingItemsToFeedback action 已保证：两者都按 valid 数组顺序迭代）。
+ *
  * 流程：
- *   1) 调 Qwen-Plus 聚类（item_indices 归属）
- *   2) insert feedback_topics（frequency 由触发器同步）
- *   3) update feedback_items.topic_id + sentiment
- *   4) 写 sample_feedback + sort_order
- *   5) status=completed
+ *   1) 推导 clusterItems（sourceItems 优先，回退 items）
+ *   2) 调 Qwen-Plus 聚类（item_indices 归属）
+ *   3) insert feedback_topics（frequency 由触发器同步）
+ *   4) update feedback_items.topic_id + sentiment
+ *   5) 写 sample_feedback + sort_order
+ *   6) status=completed
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { dashscopeChat, corsHeaders } from "../_shared/supabase.ts";
+
+// 会议转入模式（06 工单）传入的条目结构；EF 只用 content，source_* 仅由调用方写库时携带
+interface SourceItem {
+  content: string;
+  source_type?: string;
+  source_meta?: Record<string, unknown>;
+}
 
 const CLUSTERING_SYSTEM_PROMPT = `你是用户反馈分析专家。对一批用户反馈做主题聚类，输出严格 JSON。
 
@@ -31,9 +47,27 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const { analysisId, items } = await req.json();
-  if (!analysisId || !Array.isArray(items) || items.length === 0) {
-    return json({ success: false, error: { code: "VALIDATION_ERROR", message: "缺少 analysisId 或 items" } }, 422);
+  const { analysisId, items, sourceItems } = await req.json();
+  if (!analysisId) {
+    return json({ success: false, error: { code: "VALIDATION_ERROR", message: "缺少 analysisId" } }, 422);
+  }
+
+  // 归一化两种入参模式为 clusterItems（送 Qwen 的纯字符串数组）
+  // - sourceItems 优先（会议转入模式，06 工单）
+  // - 回退 items（粘贴/文件模式）
+  // 顺序敏感：调用方保证 sourceItems 顺序 == 它批量插入 feedback_items 的顺序
+  let clusterItems: string[];
+  if (Array.isArray(sourceItems) && sourceItems.length > 0) {
+    clusterItems = sourceItems
+      .map((s: SourceItem) => (s && typeof s.content === "string" ? s.content : ""))
+      .filter((c: string) => c.trim().length > 0);
+  } else if (Array.isArray(items) && items.length > 0) {
+    clusterItems = items.filter((c: unknown): c is string => typeof c === "string" && c.trim().length > 0);
+  } else {
+    clusterItems = [];
+  }
+  if (clusterItems.length === 0) {
+    return json({ success: false, error: { code: "VALIDATION_ERROR", message: "缺少 items 或 sourceItems" } }, 422);
   }
 
   const supabase = createClient(
@@ -45,12 +79,12 @@ Deno.serve(async (req) => {
   try {
     // 1. 调 Qwen-Plus 聚类
     // 反馈列表带上编号，便于模型返回 item_indices
-    const indexedItems = items.map((it: string, i: number) => `[${i}] ${it}`).join("\n");
+    const indexedItems = clusterItems.map((it: string, i: number) => `[${i}] ${it}`).join("\n");
     const { content, tokens } = await dashscopeChat({
       purpose: "cluster",
       messages: [
         { role: "system", content: CLUSTERING_SYSTEM_PROMPT },
-        { role: "user", content: `共 ${items.length} 条反馈，按编号聚类：\n${indexedItems}` },
+        { role: "user", content: `共 ${clusterItems.length} 条反馈，按编号聚类：\n${indexedItems}` },
       ],
       jsonMode: true,
     });
@@ -83,13 +117,13 @@ Deno.serve(async (req) => {
     const validTopics = (parsed.topics ?? []).filter((t: any) => t.name && t.name.trim());
     // 加上 unassigned 作为"其他"主题（如果有）
     const unassigned = (parsed.unassigned_indices ?? []).filter(
-      (i: number) => i >= 0 && i < items.length
+      (i: number) => i >= 0 && i < clusterItems.length
     );
 
     const topicsToInsert: any[] = [];
     for (const t of validTopics) {
       const indices: number[] = (t.item_indices ?? []).filter(
-        (i: number) => i >= 0 && i < items.length
+        (i: number) => i >= 0 && i < clusterItems.length
       );
       if (indices.length === 0) continue;
       topicsToInsert.push({
@@ -100,7 +134,7 @@ Deno.serve(async (req) => {
         sentiment: normalizeSentiment(t.sentiment),
         priority: normalizePriority(t.priority),
         frequency: 0, // 触发器同步
-        sample_feedback: indices.slice(0, 3).map((i) => items[i]),
+        sample_feedback: indices.slice(0, 3).map((i) => clusterItems[i]),
       });
     }
     // "其他"主题
@@ -113,7 +147,7 @@ Deno.serve(async (req) => {
         sentiment: "neutral",
         priority: "low",
         frequency: 0,
-        sample_feedback: unassigned.slice(0, 3).map((i) => items[i]),
+        sample_feedback: unassigned.slice(0, 3).map((i) => clusterItems[i]),
       });
       validTopics.push({ name: "其他", item_indices: unassigned, sentiment: "neutral" });
     }

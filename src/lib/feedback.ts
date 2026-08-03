@@ -242,3 +242,43 @@ export function computeSentimentDistribution(
 }
 
 export type { FeedbackItem, FeedbackTopic };
+
+// ============ seam 7：会议 issue 条目转入反馈校验（06 工单） ============
+//
+// 对应《ADR-0002》三条硬约束之一：只转 category='issue'。
+// 三个过滤维度：本会议条目 / 未转入 / 内容非空。
+// 此纯函数只做"哪些可转"的判定，不接触 DB——可单测、可在 server action 复用。
+
+export interface TransferableMeetingItem {
+  id: string;
+  meeting_id: string;
+  category: string;
+  content: string;
+  transferred_to_feedback: boolean;
+}
+
+/**
+ * 从一批会议条目中筛出可转入反馈的 issue 条目。
+ *
+ * ADR-0002 三条硬约束之一（只转 issue）在此强制：
+ * - category 必须为 'issue'（requirement/decision/todo 不降级进反馈池）
+ * - transferred_to_feedback=false（防重复转入，已转入的条目再次转入无意义）
+ * - 必须本会议（meeting_id 匹配，跨会议条目不在此调用范围内）
+ * - content 非空（聚类对空内容无意义）
+ *
+ * 保持输入顺序——后续 action 批量插入 feedback_items 与 Edge Function
+ * 按位置回填 topic_id 都依赖此顺序稳定。
+ */
+export function filterTransferableItems(
+  items: TransferableMeetingItem[],
+  meetingId: string
+): TransferableMeetingItem[] {
+  return items.filter(
+    (it) =>
+      it.meeting_id === meetingId &&
+      it.category === "issue" &&
+      !it.transferred_to_feedback &&
+      typeof it.content === "string" &&
+      it.content.trim().length > 0
+  );
+}
