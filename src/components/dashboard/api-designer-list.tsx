@@ -8,36 +8,33 @@
  * 这里只负责 toggle 状态 + 两种渲染形态。仿 requirement-filters.tsx 的 URL 驱动模式。
  *
  * URL 同步：`?view=grouped` 持久化视图偏好（刷新/分享可恢复）。默认 flat。
+ *
+ * 排序：分组顺序由 Server Component 在 DB 查询里排好（lifecycle/priority/updated_at，
+ * 与 listRequirements 一致），客户端不再重排——避免排序逻辑分叉。
  */
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
-import { API_STATUS_META, groupApiDraftsByRequirement } from "@/lib/api-designer";
+import { useEffect, useState, useTransition } from "react";
+import yaml from "js-yaml";
+import {
+  API_STATUS_META,
+  extractFirstPathMethod,
+  groupApiDraftsByRequirement,
+} from "@/lib/api-designer";
 import type { RequirementProjection } from "@/lib/api-designer";
-import { LIFECYCLE_LABELS, LIFECYCLE_ORDER } from "@/lib/requirements";
-import type {
-  ApiDraft,
-  PriorityLevel,
-  RequirementLifecycle,
-} from "@/types/database";
+import {
+  LIFECYCLE_LABELS,
+  PRIORITY_COLOR,
+  PRIORITY_LABELS,
+} from "@/lib/requirements";
+import type { ApiDraft } from "@/types/database";
 
 type ViewMode = "flat" | "grouped";
 
-const PRIORITY_LABELS: Record<PriorityLevel, string> = {
-  high: "高优",
-  medium: "中",
-  low: "低",
-};
-const PRIORITY_COLOR: Record<PriorityLevel, string> = {
-  high: "text-red-600",
-  medium: "text-amber-600",
-  low: "text-muted-foreground",
-};
-
 interface ApiDesignerListProps {
   drafts: ApiDraft[];
-  /** 分组模式需要的需求元信息（Server Component 批量查好传入） */
+  /** 分组模式需要的需求元信息（Server Component 批量查好传入，已按 lifecycle/priority 排序） */
   requirements: RequirementProjection[];
   /** 服务端从 ?view= 读出的初始视图（避免 hydration mismatch） */
   initialView: ViewMode;
@@ -149,7 +146,7 @@ function FlatView({ drafts }: { drafts: ApiDraft[] }) {
   );
 }
 
-/** 分组视图：按 Requirement 分组展示 */
+/** 分组视图：按 Requirement 分组展示（顺序由传入的 requirements 决定，已排序） */
 function GroupedView({
   drafts,
   requirements,
@@ -157,25 +154,7 @@ function GroupedView({
   drafts: ApiDraft[];
   requirements: RequirementProjection[];
 }) {
-  // 复用 03 的 lifecycle asc → priority asc 排序：分组顺序与需求池一致
-  const lifecycleRank = new Map(LIFECYCLE_ORDER.map((l, i) => [l, i]));
-  const priorityRank = new Map<PriorityLevel, number>([
-    ["high", 0],
-    ["medium", 1],
-    ["low", 2],
-  ]);
-  const sortedReqs = [...requirements].sort((a, b) => {
-    const la = lifecycleRank.get(a.lifecycle as RequirementLifecycle) ?? 99;
-    const lb = lifecycleRank.get(b.lifecycle as RequirementLifecycle) ?? 99;
-    if (la !== lb) return la - lb;
-    const pa = priorityRank.get(a.priority as PriorityLevel) ?? 99;
-    const pb = priorityRank.get(b.priority as PriorityLevel) ?? 99;
-    if (pa !== pb) return pa - pb;
-    // 兜底：标题稳定排序
-    return a.title.localeCompare(b.title, "zh");
-  });
-
-  const groups = groupApiDraftsByRequirement(drafts, sortedReqs);
+  const groups = groupApiDraftsByRequirement(drafts, requirements);
 
   if (groups.length === 0) {
     return (
@@ -211,16 +190,12 @@ function GroupedView({
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-medium">{g.requirement!.title}</h3>
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                    {LIFECYCLE_LABELS[g.requirement!.lifecycle as RequirementLifecycle] ??
-                      g.requirement!.lifecycle}
+                    {LIFECYCLE_LABELS[g.requirement!.lifecycle]}
                   </span>
                   <span
-                    className={`text-[10px] ${
-                      PRIORITY_COLOR[g.requirement!.priority as PriorityLevel] ?? ""
-                    }`}
+                    className={`text-[10px] ${PRIORITY_COLOR[g.requirement!.priority]}`}
                   >
-                    {PRIORITY_LABELS[g.requirement!.priority as PriorityLevel] ??
-                      g.requirement!.priority}
+                    {PRIORITY_LABELS[g.requirement!.priority]}
                   </span>
                 </div>
               )}
@@ -229,33 +204,83 @@ function GroupedView({
               </span>
             </header>
 
-            {/* 组内接口清单 */}
+            {/* 组内接口清单：path + method + origin 标签 */}
             <ul className="divide-y divide-border">
-              {g.drafts.map((d) => {
-                const meta = API_STATUS_META[d.status];
-                return (
-                  <li key={d.id}>
-                    <Link
-                      href={`/dashboard/api-designer/${d.id}`}
-                      className="flex items-center justify-between gap-2 px-4 py-2.5 transition-colors hover:bg-muted/40"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{d.title}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {d.business_requirement}
-                        </p>
-                      </div>
-                      <span className={`shrink-0 text-xs font-medium ${meta.color}`}>
-                        {meta.label}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
+              {g.drafts.map((d) => (
+                <li key={d.id}>
+                  <GroupedDraftRow draft={d} />
+                </li>
+              ))}
             </ul>
           </section>
         );
       })}
     </div>
   );
+}
+
+/**
+ * 组内单行：从 current_yaml 解析出首个 path + method，origin 由 source_requirement_id 推断。
+ * YAML 解析放客户端（仅分组视图用到，避免污染列表首屏 bundle——js-yaml 动态解析缓存）。
+ */
+function GroupedDraftRow({ draft }: { draft: ApiDraft }) {
+  const meta = API_STATUS_META[draft.status];
+  const endpoint = useFirstEndpoint(draft.current_yaml);
+  // origin：source_requirement_id 非空 = 来自需求；null = 自由创建
+  const originLabel = draft.source_requirement_id ? "来自需求" : "自由创建";
+
+  return (
+    <Link
+      href={`/dashboard/api-designer/${draft.id}`}
+      className="flex items-center justify-between gap-2 px-4 py-2.5 transition-colors hover:bg-muted/40"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{draft.title}</p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          {endpoint ? (
+            <>
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-primary">
+                {endpoint.method}
+              </span>
+              <span className="truncate font-mono text-[10px]">{endpoint.path}</span>
+            </>
+          ) : (
+            <span className="text-[10px] italic">
+              {draft.current_yaml ? "解析中…" : "无 YAML"}
+            </span>
+          )}
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">{originLabel}</span>
+        </div>
+      </div>
+      <span className={`shrink-0 text-xs font-medium ${meta.color}`}>{meta.label}</span>
+    </Link>
+  );
+}
+
+/**
+ * 从 YAML 字符串解析首个 path + method（缓存解析结果，避免每次渲染重解析）。
+ * 用 useState + useEffect：首渲染返回 null（避免 hydration mismatch，因 SSR 无法跑 yaml.load），
+ * 挂载后异步解析。失败/空 YAML 永远返回 null。
+ */
+function useFirstEndpoint(
+  currentYaml: string | null
+): { path: string; method: string } | null {
+  const [endpoint, setEndpoint] = useState<{ path: string; method: string } | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (!currentYaml) {
+      setEndpoint(null);
+      return;
+    }
+    try {
+      const doc = yaml.load(currentYaml);
+      setEndpoint(extractFirstPathMethod(doc));
+    } catch {
+      setEndpoint(null);
+    }
+  }, [currentYaml]);
+
+  return endpoint;
 }

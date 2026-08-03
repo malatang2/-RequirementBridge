@@ -81,6 +81,24 @@ export const LIFECYCLE_ORDER: RequirementLifecycle[] = [
   "parked",
 ];
 
+/**
+ * Priority 展示配置（UI 共享，避免多处重复定义）。
+ * PRIORITY_OPTIONS = 枚举声明顺序，与 PRIORITY_LABELS/PRIORITY_COLOR 一一对应。
+ */
+export const PRIORITY_OPTIONS: PriorityLevel[] = ["high", "medium", "low"];
+
+export const PRIORITY_LABELS: Record<PriorityLevel, string> = {
+  high: "高优",
+  medium: "中",
+  low: "低",
+};
+
+export const PRIORITY_COLOR: Record<PriorityLevel, string> = {
+  high: "text-red-600",
+  medium: "text-amber-600",
+  low: "text-muted-foreground",
+};
+
 /** Requirement 来源展示标签（对应 source_type 取值集合） */
 export const SOURCE_LABELS: Record<"feedback_topic" | "meeting_item" | "manual", string> = {
   feedback_topic: "💬 反馈",

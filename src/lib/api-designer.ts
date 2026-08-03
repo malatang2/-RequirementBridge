@@ -12,7 +12,7 @@
  * 服务端 swagger-parser 权威校验双层分工。
  */
 
-import type { GenStatus, ApiDraft } from "@/types/database";
+import type { GenStatus, ApiDraft, PriorityLevel, RequirementLifecycle } from "@/types/database";
 
 /** 必填错误码（每个 path 至少含这四个，验收门槛 100%） */
 export const REQUIRED_ERROR_CODES = ["400", "401", "404", "500"] as const;
@@ -260,12 +260,15 @@ export const API_STATUS_META: Record<ApiGenStatus, { label: string; color: strin
  * Requirement 元信息投影——只取分组视图需要的字段。
  * 故意不直接复用 RequirementDraft，避免把整个实体塞进纯函数的输入
  * （requirements 由调用方批量查好后传入，可能来自 select 子集）。
+ *
+ * lifecycle / priority 用枚举类型而非 string：避免每个使用点都要 `as` 反复 cast
+ * （Primitive Obsession——primitive 包装了 domain concept 却丢了类型约束）。
  */
 export interface RequirementProjection {
   id: string;
   title: string;
-  lifecycle: string;
-  priority: string;
+  lifecycle: RequirementLifecycle;
+  priority: PriorityLevel;
 }
 
 /** 分组结果：有归属（按需求聚合）+ 未归属组（requirement === null，恒在最后） */
@@ -283,15 +286,13 @@ export interface ApiDraftGroup {
  * 分组顺序：按 requirements 传入顺序（调用方排序后传入），未归属组恒在最后。
  * 组内 drafts 顺序保持传入顺序（页面查询时已 order by created_at desc）。
  */
-export function groupApiDraftsByRequirement<
-  T extends { source_requirement_id: string | null },
->(
-  drafts: T[],
+export function groupApiDraftsByRequirement(
+  drafts: ApiDraft[],
   requirements: RequirementProjection[]
-): (Omit<ApiDraftGroup, "drafts"> & { drafts: T[] })[] {
+): ApiDraftGroup[] {
   const reqMap = new Map(requirements.map((r) => [r.id, r]));
-  const grouped = new Map<string, T[]>();
-  const unattached: T[] = [];
+  const grouped = new Map<string, ApiDraft[]>();
+  const unattached: ApiDraft[] = [];
 
   for (const d of drafts) {
     const rid = d.source_requirement_id;
@@ -304,8 +305,8 @@ export function groupApiDraftsByRequirement<
     }
   }
 
-  const groups: (Omit<ApiDraftGroup, "drafts"> & { drafts: T[] })[] =
-    Array.from(grouped.entries()).map(([rid, ds]) => {
+  const groups: ApiDraftGroup[] = Array.from(grouped.entries()).map(
+    ([rid, ds]) => {
       const r = reqMap.get(rid)!;
       return {
         requirement: {
@@ -316,11 +317,39 @@ export function groupApiDraftsByRequirement<
         },
         drafts: ds,
       };
-    });
+    }
+  );
 
   // 未归属组恒在最后；空时不出现（避免空「未归属」组干扰 UI）
   if (unattached.length > 0) {
     groups.push({ requirement: null, drafts: unattached });
   }
   return groups;
+}
+
+// ============ seam 7：从 OpenAPI 文档提取首个 path + method（07 工单）============
+
+const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
+
+/**
+ * 从已解析的 OpenAPI 文档对象中提取首个 path + 首个 method（列表分组视图用）。
+ * 纯函数：输入是已解析的 doc（不是 YAML 字符串），失败/空一律返回 null。
+ * 「首个」= Object 插入顺序的第一个（OpenAPI doc 通常单 path 单 method，多时取代表）。
+ */
+export function extractFirstPathMethod(
+  doc: unknown
+): { path: string; method: string } | null {
+  if (typeof doc !== "object" || doc === null) return null;
+  const paths = (doc as { paths?: unknown }).paths;
+  if (typeof paths !== "object" || paths === null) return null;
+
+  for (const [path, pathObj] of Object.entries(paths)) {
+    if (typeof pathObj !== "object" || pathObj === null) continue;
+    for (const method of HTTP_METHODS) {
+      if (method in (pathObj as Record<string, unknown>)) {
+        return { path, method };
+      }
+    }
+  }
+  return null;
 }

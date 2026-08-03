@@ -2,7 +2,12 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { getCurrentProjectId } from "@/lib/current-project";
 import { listRequirements } from "@/app/dashboard/requirements/actions";
-import { LIFECYCLE_LABELS, resolveSourceLabel } from "@/lib/requirements";
+import {
+  LIFECYCLE_LABELS,
+  PRIORITY_COLOR,
+  PRIORITY_LABELS,
+  resolveSourceLabel,
+} from "@/lib/requirements";
 import { RequirementNewButton } from "@/components/dashboard/requirement-new-button";
 import { RequirementFilters } from "@/components/dashboard/requirement-filters";
 import type {
@@ -10,17 +15,6 @@ import type {
   RequirementDraft,
   RequirementLifecycle,
 } from "@/types/database";
-
-const PRIORITY_LABELS: Record<PriorityLevel, string> = {
-  high: "高优",
-  medium: "中",
-  low: "低",
-};
-const PRIORITY_COLOR: Record<string, string> = {
-  high: "text-red-600",
-  medium: "text-amber-600",
-  low: "text-muted-foreground",
-};
 
 export default async function RequirementsPage({
   searchParams,

@@ -62,7 +62,12 @@ export default async function ApiDesignerPage({
       .from("requirement_drafts")
       .select("id, title, lifecycle, priority, deleted_at")
       .in("id", sourceIds)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      // 排序复用 listRequirements（actions.ts）：lifecycle asc → priority asc → updated_at desc，
+      // 分组视图组顺序即与需求池一致——不在客户端重排（避免与 DB 排序逻辑分叉）。
+      .order("lifecycle", { ascending: true })
+      .order("priority", { ascending: true })
+      .order("updated_at", { ascending: false });
     const reqs = (reqData as Pick<RequirementDraft, "id" | "title" | "lifecycle" | "priority" | "deleted_at">[] | null) ?? [];
     requirements = reqs.map((r) => ({
       id: r.id,

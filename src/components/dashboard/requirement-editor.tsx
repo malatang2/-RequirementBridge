@@ -4,7 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { updateRequirement, deleteRequirement, confirmRequirement } from "@/app/dashboard/requirements/actions";
-import { LIFECYCLE_LABELS, resolveSourceLabel } from "@/lib/requirements";
+import {
+  LIFECYCLE_LABELS,
+  PRIORITY_COLOR,
+  PRIORITY_LABELS,
+  PRIORITY_OPTIONS,
+  resolveSourceLabel,
+} from "@/lib/requirements";
 import type { RequirementDraft } from "@/types/database";
 import { CopyButton } from "@/components/dashboard/copy-button";
 import { track } from "@/lib/analytics";
@@ -13,18 +19,6 @@ interface Props {
   requirement: RequirementDraft;
   deleted: boolean;
 }
-
-const PRIORITIES = [
-  { value: "high", label: "高优" },
-  { value: "medium", label: "中" },
-  { value: "low", label: "低" },
-] as const;
-
-const PRIORITY_COLOR: Record<string, string> = {
-  high: "text-red-600",
-  medium: "text-amber-600",
-  low: "text-muted-foreground",
-};
 
 /**
  * Requirement 详情交互层（仿 meeting-item-card.tsx 的 editing/viewing 模式切换）。
@@ -120,8 +114,8 @@ export function RequirementEditor({ requirement, deleted }: Props) {
             onChange={(e) => setPriority(e.target.value)}
             className="rounded-md border border-input bg-background px-2 py-1 text-xs"
           >
-            {PRIORITIES.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
+            {PRIORITY_OPTIONS.map((p) => (
+              <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
             ))}
           </select>
         </div>
@@ -164,8 +158,8 @@ export function RequirementEditor({ requirement, deleted }: Props) {
             </span>
           )}
         </div>
-        <p className={`mt-1 text-xs ${PRIORITY_COLOR[requirement.priority] ?? ""}`}>
-          优先级：{PRIORITIES.find((p) => p.value === requirement.priority)?.label}
+        <p className={`mt-1 text-xs ${PRIORITY_COLOR[requirement.priority]}`}>
+          优先级：{PRIORITY_LABELS[requirement.priority]}
           {requirement.is_edited && (
             <span className="ml-2 text-muted-foreground">· 已编辑</span>
           )}

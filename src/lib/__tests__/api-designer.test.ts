@@ -8,6 +8,7 @@ import {
   analyzeOpenApiDoc,
   nextVersionNumber,
   groupApiDraftsByRequirement,
+  extractFirstPathMethod,
   REQUIRED_ERROR_CODES,
 } from "@/lib/api-designer";
 import type { ApiDraft, RequirementDraft } from "@/types/database";
@@ -410,5 +411,65 @@ describe("groupApiDraftsByRequirement", () => {
 
   it("空 drafts 返回空数组（不出「未归属」空组）", () => {
     expect(groupApiDraftsByRequirement([], [])).toEqual([]);
+  });
+});
+
+// ============ seam 7：extractFirstPathMethod（07 工单）============
+
+describe("extractFirstPathMethod", () => {
+  it("返回首个 path + 首个 method", () => {
+    const doc = {
+      paths: {
+        "/login": { post: { responses: {} } },
+      },
+    };
+    expect(extractFirstPathMethod(doc)).toEqual({ path: "/login", method: "post" });
+  });
+
+  it("多个 path 取 Object 插入顺序的第一个", () => {
+    const doc = {
+      paths: {
+        "/users": { get: {} },
+        "/users/{id}": { delete: {} },
+      },
+    };
+    expect(extractFirstPathMethod(doc)).toEqual({ path: "/users", method: "get" });
+  });
+
+  it("同 path 多 method 取 HTTP_METHODS 声明顺序靠前的", () => {
+    // get 在 HTTP_METHODS 里排在 post 之前
+    const doc = { paths: { "/x": { post: {}, get: {} } } };
+    expect(extractFirstPathMethod(doc)).toEqual({ path: "/x", method: "get" });
+  });
+
+  it("跳过非 HTTP 方法键（parameters/summary）", () => {
+    const doc = {
+      paths: {
+        "/x": {
+          summary: "desc",
+          parameters: [],
+          get: {},
+        },
+      },
+    };
+    expect(extractFirstPathMethod(doc)).toEqual({ path: "/x", method: "get" });
+  });
+
+  it("无 paths 返回 null", () => {
+    expect(extractFirstPathMethod({})).toBeNull();
+  });
+
+  it("paths 为空对象返回 null", () => {
+    expect(extractFirstPathMethod({ paths: {} })).toBeNull();
+  });
+
+  it("path 对象里没有 HTTP method 返回 null", () => {
+    expect(extractFirstPathMethod({ paths: { "/x": { summary: "s" } } })).toBeNull();
+  });
+
+  it("输入非对象返回 null", () => {
+    expect(extractFirstPathMethod(null)).toBeNull();
+    expect(extractFirstPathMethod("yaml string")).toBeNull();
+    expect(extractFirstPathMethod(undefined)).toBeNull();
   });
 });

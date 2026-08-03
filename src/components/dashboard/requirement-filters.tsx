@@ -2,19 +2,19 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
-import { LIFECYCLE_LABELS, LIFECYCLE_ORDER, SOURCE_LABELS } from "@/lib/requirements";
-import type { PriorityLevel, RequirementLifecycle } from "@/types/database";
+import {
+  LIFECYCLE_LABELS,
+  LIFECYCLE_ORDER,
+  PRIORITY_LABELS,
+  PRIORITY_OPTIONS,
+  SOURCE_LABELS,
+} from "@/lib/requirements";
+import type { RequirementLifecycle } from "@/types/database";
 
 /**
  * Requirement 列表筛选器（客户端，驱动 URL searchParams）。
  * 通过 useRouter 切换 query，Server Component 据此重新筛选——保持 v1 的服务端直查模式。
  */
-const PRIORITY_OPTIONS: PriorityLevel[] = ["high", "medium", "low"];
-const PRIORITY_LABELS: Record<PriorityLevel, string> = {
-  high: "高优",
-  medium: "中",
-  low: "低",
-};
 
 const SOURCE_KEYS = ["feedback_topic", "meeting_item", "manual"] as const;
 
