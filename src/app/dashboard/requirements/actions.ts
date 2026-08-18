@@ -6,10 +6,12 @@
  *
  * 对应 DoD：Requirement 可创建/读取（含筛选）/更新/软删除。
  * 注意：lifecycle 流转（Confirm 关卡）属 04 工单，本层 create 仅固定写 'draft'。
+ * 灰度（09）：所有 action 开头二次校验 requirement_hub flag，防绕过前端直调。
  */
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseActionClient } from "@/lib/supabase/action-client";
+import { loadFeatureFlags, FEATURE_UNAVAILABLE_ERROR } from "@/lib/feature-flags";
 import { validateRequirementInput, describeTransition } from "@/lib/requirements";
 import type {
   PriorityLevel,
@@ -37,6 +39,10 @@ export async function listRequirements(
   filters?: RequirementFilters
 ): Promise<RequirementDraft[]> {
   const supabase = await createSupabaseActionClient();
+  // 灰度 off → 空列表（本 action 返回数组而非结果联合，页面层另有占位 gate）
+  const featureFlags = await loadFeatureFlags(supabase);
+  if (!featureFlags.requirementHub) return [];
+
   let query = supabase
     .from("requirement_drafts")
     .select("*")
@@ -75,6 +81,10 @@ export async function createRequirement(
   }
 
   const supabase = await createSupabaseActionClient();
+  const featureFlags = await loadFeatureFlags(supabase);
+  if (!featureFlags.requirementHub) {
+    return { ok: false, error: FEATURE_UNAVAILABLE_ERROR };
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -115,6 +125,10 @@ export async function updateRequirement(
   }
 
   const supabase = await createSupabaseActionClient();
+  const featureFlags = await loadFeatureFlags(supabase);
+  if (!featureFlags.requirementHub) {
+    return { ok: false, error: FEATURE_UNAVAILABLE_ERROR };
+  }
   const { data, error } = await supabase
     .from("requirement_drafts")
     .update({
@@ -139,6 +153,10 @@ export async function updateRequirement(
 /** 软删除 Requirement（标记 deleted_at，不是 delete 行，数据保留） */
 export async function deleteRequirement(id: string): Promise<RequirementActionResult> {
   const supabase = await createSupabaseActionClient();
+  const featureFlags = await loadFeatureFlags(supabase);
+  if (!featureFlags.requirementHub) {
+    return { ok: false, error: FEATURE_UNAVAILABLE_ERROR };
+  }
   const { data, error } = await supabase
     .from("requirement_drafts")
     .update({ deleted_at: new Date().toISOString() })
@@ -173,6 +191,10 @@ export async function confirmRequirement(
   id: string
 ): Promise<RequirementActionResult> {
   const supabase = await createSupabaseActionClient();
+  const featureFlags = await loadFeatureFlags(supabase);
+  if (!featureFlags.requirementHub) {
+    return { ok: false, error: FEATURE_UNAVAILABLE_ERROR };
+  }
 
   // 1. 读出当前 lifecycle，用纯函数把关流转合法性
   const { data: current, error: selectError } = await supabase

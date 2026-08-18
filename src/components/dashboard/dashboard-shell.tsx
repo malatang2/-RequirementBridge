@@ -6,23 +6,26 @@ import { ProjectSwitcher } from "./project-switcher";
 import { ProjectCreateDialog } from "./project-create-dialog";
 import { signOut } from "@/app/(auth)/actions";
 import type { Project } from "@/types/database";
+import type { FeatureFlags } from "@/lib/feature-flags";
 
 interface DashboardShellProps {
   projects: Project[];
   currentProjectId: string | null;
+  featureFlags: FeatureFlags;
   children: React.ReactNode;
 }
 
 export function DashboardShell({
   projects,
   currentProjectId,
+  featureFlags,
   children,
 }: DashboardShellProps) {
   const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <DashboardSidebar />
+      <DashboardSidebar featureFlags={featureFlags} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* 顶栏 */}

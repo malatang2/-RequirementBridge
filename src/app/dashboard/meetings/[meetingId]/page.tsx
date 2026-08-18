@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { loadFeatureFlags } from "@/lib/feature-flags";
 import type { Meeting, MeetingItem } from "@/types/database";
 import {
   CATEGORY_LABELS,
@@ -21,6 +22,9 @@ export default async function MeetingDetailPage({
 }) {
   const { meetingId } = await params;
   const supabase = await createSupabaseServerClient();
+
+  // 灰度 gate（09）：会议详情页是 server component，读 flags 控制转入入口渲染
+  const featureFlags = await loadFeatureFlags(supabase);
 
   const { data: meeting } = await supabase
     .from("meetings")
@@ -133,8 +137,9 @@ export default async function MeetingDetailPage({
                   <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                     {list.length}
                   </span>
-                  {/* issue 分组：批量转反馈入口（06 工单，ADR-0002 只转 issue） */}
-                  {cat === "issue" && list.length > 0 && (
+                  {/* issue 分组：批量转反馈入口（06 工单，ADR-0002 只转 issue）。
+                      09 灰度：flag off 不渲染入口（server action 侧还有二次校验） */}
+                  {cat === "issue" && list.length > 0 && featureFlags.requirementHub && (
                     <MeetingBatchTransferButton
                       meetingId={meeting_.id}
                       issueItems={list}

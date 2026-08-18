@@ -32,6 +32,15 @@ export type InputMode = "audio" | "text" | "paste" | "file";
 export type ExportFormat = "md" | "csv" | "yaml" | "json" | "png";
 export type ExportModule = "meeting" | "api" | "feedback" | "requirement";
 
+export interface Profile {
+  id: string; // = auth.users.id（注册触发器自动建行）
+  email: string;
+  display_name: string | null;
+  feature_flags: Record<string, unknown>; // 007：灰度开关（requirement_hub 等，见 src/lib/feature-flags.ts）
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Project {
   id: string;
   user_id: string;

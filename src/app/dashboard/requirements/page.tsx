@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getCurrentProjectId } from "@/lib/current-project";
+import { loadFeatureFlags } from "@/lib/feature-flags";
+import { FeatureUnavailable } from "@/components/dashboard/feature-unavailable";
 import { listRequirements } from "@/app/dashboard/requirements/actions";
 import {
   LIFECYCLE_LABELS,
@@ -21,6 +24,13 @@ export default async function RequirementsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // 灰度 gate（09）：flag off 时直链也只渲染占位，不触达数据层
+  const supabase = await createSupabaseServerClient();
+  const featureFlags = await loadFeatureFlags(supabase);
+  if (!featureFlags.requirementHub) {
+    return <FeatureUnavailable />;
+  }
+
   const projectId = await getCurrentProjectId();
 
   if (!projectId) {
