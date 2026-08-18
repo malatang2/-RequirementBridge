@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseActionClient } from "@/lib/supabase/action-client";
 import { validateFeedbackInput, filterTransferableItems } from "@/lib/feedback";
+import { loadFeatureFlags, FEATURE_UNAVAILABLE_ERROR } from "@/lib/feature-flags";
 import { publicEnv } from "@/lib/env";
 
 export type FeedbackActionResult =
@@ -187,6 +188,9 @@ export async function generateRequirementFromTopics(
  *      → 回写 meeting_items.transferred_to_feedback=true（防重复转入 + 角标依据）
  *      → 触发 feedback-analyze EF（传 sourceItems，顺序与插入一致便于按位置回填）
  *      → revalidatePath
+ *
+ * 灰度（09）：requirement_hub flag off 时整个 action 拒绝（会议转入是
+ * Phase 1 新能力；本文件其余 action 为 v1 原有功能，不 gate）。
  */
 export async function transferMeetingItemsToFeedback(
   projectId: string,
@@ -194,6 +198,10 @@ export async function transferMeetingItemsToFeedback(
   itemIds: string[]
 ): Promise<FeedbackActionResult> {
   const supabase = await createSupabaseActionClient();
+  const featureFlags = await loadFeatureFlags(supabase);
+  if (!featureFlags.requirementHub) {
+    return { ok: false, error: FEATURE_UNAVAILABLE_ERROR };
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();

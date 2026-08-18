@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { loadFeatureFlags } from "@/lib/feature-flags";
+import { FeatureUnavailable } from "@/components/dashboard/feature-unavailable";
 import type { RequirementDraft } from "@/types/database";
 import { RequirementEditor } from "@/components/dashboard/requirement-editor";
 
@@ -11,6 +13,12 @@ export default async function RequirementDetailPage({
 }) {
   const { requirementId } = await params;
   const supabase = await createSupabaseServerClient();
+
+  // 灰度 gate（09）：flag off 时详情直链同样只渲染占位
+  const featureFlags = await loadFeatureFlags(supabase);
+  if (!featureFlags.requirementHub) {
+    return <FeatureUnavailable />;
+  }
 
   // 直链仍可访问软删记录（deleted_at 非空），由 Editor 展示"已删除"提示。
   const { data: draft } = await supabase

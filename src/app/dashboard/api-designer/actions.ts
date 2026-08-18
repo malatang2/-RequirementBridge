@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseActionClient } from "@/lib/supabase/action-client";
 import { validateApiInput, nextVersionNumber } from "@/lib/api-designer";
+import { loadFeatureFlags, FEATURE_UNAVAILABLE_ERROR } from "@/lib/feature-flags";
 import { publicEnv } from "@/lib/env";
 import type { ApiDraft } from "@/types/database";
 
@@ -40,8 +41,14 @@ export async function createApiDraft(
   // 【05】源需求校验：传入时才校验（跨项目越权防护）。
   // RLS 只保证 user_id 隔离，但用户可能传别的项目的 requirement_id——
   // 故显式校验：存在 + 同项目 + lifecycle='confirmed' + 未软删。
+  // 【09】灰度：需求带入是 Phase 1 新能力，只 gate 本参数路径；
+  // 不带 sourceRequirementId 的 v1 原有用法不受影响（regenerate/saveVersion 同理不 gate）。
   let sourceRequirementId: string | null = null;
   if (typeof input.sourceRequirementId === "string" && input.sourceRequirementId) {
+    const featureFlags = await loadFeatureFlags(supabase);
+    if (!featureFlags.requirementHub) {
+      return { ok: false, error: FEATURE_UNAVAILABLE_ERROR };
+    }
     const { data: srcReq } = await supabase
       .from("requirement_drafts")
       .select("id, project_id, lifecycle, deleted_at")

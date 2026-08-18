@@ -146,12 +146,12 @@ const decodeUid = (tok) =>
   JSON.parse(Buffer.from(tok.split(".")[1], "base64").toString()).sub;
 
 /**
- * Phase 1 新增 4 个集成 check（编号 11-14）。
+ * Phase 1 新增 5 个集成 check（编号 11-15）。
  * @param {{userIdA:string, userIdB:string, projectId:string, tokenA:string, tokenB:string}} ctx
  *   ctx 同时作为跨 check 传递植入门点的载体（如 ctx.aRequirementId 供 check 13 复用）。
  */
 async function runPhase1Checks({ userIdA, userIdB, projectId, tokenA, tokenB }) {
-  console.log("\n【3】Phase 1 集成 check（11-14：CRUD RLS / 会议转入 / 需求→API / 软删）");
+  console.log("\n【3】Phase 1 集成 check（11-15：CRUD RLS / 会议转入 / 需求→API / 软删 / 灰度）");
 
   if (!projectId) {
     check("Phase 1 checks 跳过：无可用 project", false, "（projectId 为空，前置 check 失败）");
@@ -523,6 +523,102 @@ async function runPhase1Checks({ userIdA, userIdB, projectId, tokenA, tokenB }) 
       "14b 详情直链：按 id 仍能查到软删需求（前端处理「已删除」态）",
       Array.isArray(detailArr) && detailArr.length === 1 && detailArr[0].deleted_at !== null,
       `(deleted_at=${detailArr[0]?.deleted_at ? "set" : "null"})`
+    );
+  }
+
+  // ───────────── check 15：requirement_hub 灰度开关链路（09：默认关 / 防提权 / 白名单 on / 隔离） ─────────────
+  // loadFeatureFlags（src/lib/feature-flags.ts）= 「用户会话读自己 profiles 行的 feature_flags」
+  // + parseFeatureFlags（requirement_hub === true 严格判定）。server action 无法从 .mjs 直调，
+  // 这里在 REST 层验证同一条读取链路的数据态；action 层 gate 是该链路上的早退分支
+  // （解析语义由 vitest feature-flags.test.ts 覆盖）。
+  // 依赖：009_profiles_rls.sql 已执行。未执行时 15b/15e 会红——那是刻意提醒，不是误报。
+  {
+    // 前置：SR 把 A 的 flags 重置为 '{}'（幂等，模拟"未白名单"的默认态）
+    await req(`/rest/v1/profiles?id=eq.${uidA}`, "PATCH", SR(), {
+      feature_flags: {},
+    });
+
+    // 15a 灰度默认关：A 用自己的会话读自己的行，解析语义应为 off
+    const offRow = await req(
+      `/rest/v1/profiles?id=eq.${uidA}&select=feature_flags`,
+      "GET",
+      AUTH(tokenA)
+    );
+    const offFlags = JSON.parse(offRow.body)?.[0]?.feature_flags;
+    check(
+      "15a 灰度默认关：A 读自己 profiles.feature_flags 解析为 off",
+      offFlags?.requirement_hub !== true,
+      `(feature_flags=${JSON.stringify(offFlags)})`
+    );
+
+    // 15b 防提权：A 的会话尝试自开 flag（PATCH 自己的行）。profiles 无 update
+    // policy，无论 PostgREST 返回 403 还是 200+0 行，改完重读必须仍是 off。
+    // 若变 true，说明 profiles 可被用户自改（009 未执行时的真实暴露）。
+    const selfPatch = await req(
+      `/rest/v1/profiles?id=eq.${uidA}`,
+      "PATCH",
+      { ...AUTH(tokenA), Prefer: "return=representation" },
+      { feature_flags: { requirement_hub: true } }
+    );
+    const afterAttempt = await req(
+      `/rest/v1/profiles?id=eq.${uidA}&select=feature_flags`,
+      "GET",
+      AUTH(tokenA)
+    );
+    const afterFlags = JSON.parse(afterAttempt.body)?.[0]?.feature_flags;
+    check(
+      "15b 防提权：A 会话自开 flag 无效（改后重读仍 off，依赖 009 RLS）",
+      afterFlags?.requirement_hub !== true,
+      `(PATCH status=${selfPatch.status}, 改后=${JSON.stringify(afterFlags)})`
+    );
+
+    // 15c 白名单执行（service_role 模拟 SQL Editor 跑 whitelist-requirement-hub.sql
+    // 的 jsonb_set 语义：read-modify-write 保留其他 key），A 的会话重读应变 on
+    const curRes = await req(
+      `/rest/v1/profiles?id=eq.${uidA}&select=feature_flags`,
+      "GET",
+      SR()
+    );
+    const curFlags = JSON.parse(curRes.body)?.[0]?.feature_flags ?? {};
+    await req(`/rest/v1/profiles?id=eq.${uidA}`, "PATCH", SR(), {
+      feature_flags: { ...curFlags, requirement_hub: true },
+    });
+    const onRow = await req(
+      `/rest/v1/profiles?id=eq.${uidA}&select=feature_flags`,
+      "GET",
+      AUTH(tokenA)
+    );
+    const onFlags = JSON.parse(onRow.body)?.[0]?.feature_flags;
+    check(
+      "15c 白名单生效：A 的 requirement_hub=true（flag on 全链路开关）",
+      onFlags?.requirement_hub === true,
+      `(feature_flags=${JSON.stringify(onFlags)})`
+    );
+
+    // 15d 非白名单对照：B 读自己的行应保持 off
+    const bProfRow = await req(
+      `/rest/v1/profiles?id=eq.${uidB}&select=feature_flags`,
+      "GET",
+      AUTH(tokenB)
+    );
+    const bFlags = JSON.parse(bProfRow.body)?.[0]?.feature_flags;
+    check(
+      "15d 非白名单对照：B 的 requirement_hub 解析为 off",
+      bFlags?.requirement_hub !== true,
+      `(feature_flags=${JSON.stringify(bFlags)})`
+    );
+
+    // 15e profiles 跨用户 RLS：A 的会话查不到 B 的行（依赖 009_profiles_rls）
+    const aSeeBProf = await req(
+      `/rest/v1/profiles?id=eq.${uidB}&select=id`,
+      "GET",
+      AUTH(tokenA)
+    );
+    const aSeeBProfArr = JSON.parse(aSeeBProf.body);
+    check(
+      "15e profiles RLS：A 会话查不到 B 的 profile 行（依赖 009_profiles_rls）",
+      Array.isArray(aSeeBProfArr) && aSeeBProfArr.length === 0,
+      `(A 看见 ${Array.isArray(aSeeBProfArr) ? aSeeBProfArr.length : "?"} 行；>0 行说明 009 未执行)`
     );
   }
 
