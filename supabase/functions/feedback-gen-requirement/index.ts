@@ -60,6 +60,8 @@ Deno.serve(async (req) => {
     const title = topics.length === 1 ? topics[0].name + "优化" : "反馈聚合需求";
 
     // 4. 写 requirement_drafts
+    // lifecycle 显式 'draft'：AI 生成的草稿需 PM 人工确认（04 工单 Confirm 关卡）才进 backlog，
+    // 对应 ADR-0002 信号降噪——不依赖 DB 默认值，让业务意图在代码里可见。
     const { data: draft, error } = await supabase.from("requirement_drafts").insert({
       user_id: userId,
       project_id: projectId,
@@ -68,6 +70,7 @@ Deno.serve(async (req) => {
       title,
       content: content.trim(),
       status: "completed",
+      lifecycle: "draft",
     }).select().single();
 
     if (error || !draft) {

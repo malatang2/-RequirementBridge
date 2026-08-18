@@ -102,3 +102,63 @@ export function resolveSourceLabel(sourceType: string): string | null {
   }
   return null;
 }
+
+/**
+ * Requirement 生命周期合法流转表（04 工单 — Confirm 关卡）。
+ *
+ * 设计：单向有向图，draft 是入口、delivered/parked 是终态（无出度）。
+ * 任何回退、跨级跳跃、自环都不在此表 → canTransition 拒绝。
+ *
+ * 本工单 UI 只用 draft→confirmed 这一条（PM 在详情页点"确认纳入需求池"），
+ * 其余路径在表里就位是为后续工单（in_progress→delivered 等 UI）铺路，避免反复改表。
+ */
+export const TRANSITIONS: Record<RequirementLifecycle, RequirementLifecycle[]> = {
+  draft: ["confirmed", "parked"],
+  confirmed: ["in_progress", "parked"],
+  in_progress: ["delivered", "parked"],
+  delivered: [], // 终态
+  parked: [], // 终态
+};
+
+/**
+ * 判定 lifecycle 流转是否合法（纯函数 seam）。
+ * 合法路径见 TRANSITIONS；自环 / 回退 / 跨级 / 出终态一律 false。
+ */
+export function canTransition(
+  from: RequirementLifecycle,
+  to: RequirementLifecycle
+): boolean {
+  if (from === to) return false; // 自环无意义
+  return TRANSITIONS[from].includes(to);
+}
+
+export type TransitionDescription =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * 流转判定 + 中文错误文案（给 server action 直接回传给 UI 用）。
+ * 仿 validateRequirementInput 的判别联合风格：成功 { ok: true }，失败带 error。
+ */
+export function describeTransition(
+  from: RequirementLifecycle,
+  to: RequirementLifecycle
+): TransitionDescription {
+  if (from === to) {
+    return { ok: false, error: "状态未变化，无需流转" };
+  }
+  if (canTransition(from, to)) {
+    return { ok: true };
+  }
+  // 区分两种典型非法情形，给用户可读的反馈
+  if (TRANSITIONS[from].length === 0) {
+    return {
+      ok: false,
+      error: `「${LIFECYCLE_LABELS[from]}」是终态，无法再流转`,
+    };
+  }
+  return {
+    ok: false,
+    error: `不支持从「${LIFECYCLE_LABELS[from]}」流转到「${LIFECYCLE_LABELS[to]}」`,
+  };
+}

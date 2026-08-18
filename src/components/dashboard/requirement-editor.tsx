@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { updateRequirement, deleteRequirement } from "@/app/dashboard/requirements/actions";
+import { updateRequirement, deleteRequirement, confirmRequirement } from "@/app/dashboard/requirements/actions";
 import { LIFECYCLE_LABELS, resolveSourceLabel } from "@/lib/requirements";
 import type { RequirementDraft } from "@/types/database";
 import { CopyButton } from "@/components/dashboard/copy-button";
+import { track } from "@/lib/analytics";
 
 interface Props {
   requirement: RequirementDraft;
@@ -70,6 +71,29 @@ export function RequirementEditor({ requirement, deleted }: Props) {
     startTransition(async () => {
       const r = await deleteRequirement(requirement.id);
       if (!r.ok) setError(r.error);
+    });
+  }
+
+  /**
+   * Confirm 关卡：draft → confirmed（04 工单）。
+   * 成功后上报 requirement_confirmed 埋点（v2 北极星指标）。
+   * 埋点点在客户端 onSuccess——server action 里的 track 为 no-op（服务端无 window）。
+   */
+  function handleConfirm() {
+    setError(null);
+    startTransition(async () => {
+      const r = await confirmRequirement(requirement.id);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      // 成功后才上报，避免失败也计入转化
+      await track("requirement_confirmed", {
+        requirementId: requirement.id,
+        sourceType: requirement.source_type,
+        projectId: requirement.project_id,
+      });
+      // revalidatePath 已在 action 内触发，页面会自动刷新 lifecycle 展示
     });
   }
 
@@ -152,6 +176,16 @@ export function RequirementEditor({ requirement, deleted }: Props) {
 
       <div className="flex flex-wrap items-center gap-2">
         <CopyButton text={requirement.content} />
+        {requirement.lifecycle === "draft" && (
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isPending}
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {isPending ? "确认中…" : "确认纳入需求池"}
+          </button>
+        )}
         <div className="flex-1" />
         <button
           type="button"
