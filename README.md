@@ -2,6 +2,21 @@
 
 > 会议决策 → 结构化需求 → 可执行 API：AI 一次性把会议与反馈转化为产品需求与技术接口。
 
+## 功能模块
+
+**v1 三模块**：会议纪要（音频/文本 → AI 提取决策/待办/需求/问题）、API 设计器（业务需求 → OpenAPI 3.0 草稿 + 版本管理）、反馈洞察（聚类/情感/频次，一键生成需求草稿）。
+
+**v2 Phase 1 — 需求统一中枢**（`profiles.feature_flags` 的 `requirement_hub` 灰度开关控制，白名单可见）：
+
+- **需求池**：统一管理来自反馈、会议与手动录入的产品需求（CRUD / 筛选 / 优先级 / 软删）
+- **Confirm 关卡**：draft → confirmed 人工确认流转，只有 PM 拍板的需求进入 backlog
+- **需求 → API 一键带入**：confirmed 需求带入 API 设计器（`source_requirement_id` 溯源）
+- **会议 issue → 反馈聚类池**：issue 条目批量转入反馈参与 AI 聚类（Copy 快照 + 防重复转入）
+- **按需求分组的 API 视图**：API 设计器按来源需求整理接口（只读）
+- **灰度三层 gate**：入口渲染控制 + 页面占位 + server action 二次校验（白名单 SQL：`scripts/whitelist-requirement-hub.sql`）
+
+**测试与质量**：Vitest 单测 223 用例（`npm test`）/ Supabase 集成联调 31 断言（`node scripts/integration-check.mjs`）/ AI 评测集（`node scripts/run-eval.mjs`，消费真实 DashScope token）。
+
 ## 技术栈
 
 - **前端**：Next.js 15 (App Router, TypeScript) + Tailwind CSS + shadcn/ui

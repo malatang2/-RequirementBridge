@@ -40,3 +40,10 @@ yarn-error.log*
 
 # test
 coverage/
+
+# zcode 会话产物
+.zcode/
+
+# 本地媒体素材（演示视频/结课作业包等二进制，不入库）
+docs/*.zip
+docs/*.mp4
