@@ -1,10 +1,26 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getCurrentProjectId } from "@/lib/current-project";
-import type { ApiDraft } from "@/types/database";
-import { API_STATUS_META } from "@/lib/api-designer";
+import type { ApiDraft, RequirementDraft } from "@/types/database";
+import { ApiDesignerList } from "@/components/dashboard/api-designer-list";
+import type { RequirementProjection } from "@/lib/api-designer";
 
-export default async function ApiDesignerPage() {
+/**
+ * API 设计器列表页（07 工单改造）。
+ *
+ * 架构：Server Component 查数据（drafts + 分组模式需要的需求元信息）→
+ * 注入 <ApiDesignerList> client 组件做视图切换交互。
+ * 仿 v1 projects/meetings 的「server 查数据 + 嵌套 client 子组件交互」模式。
+ *
+ * 视图偏好走 URL `?view=grouped`（与「选项目」用 cookie 的模式区别开），
+ * 便于刷新保留 + 链接分享。
+ */
+export default async function ApiDesignerPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const supabase = await createSupabaseServerClient();
   const projectId = await getCurrentProjectId();
 
@@ -16,6 +32,11 @@ export default async function ApiDesignerPage() {
     );
   }
 
+  const params = await searchParams;
+  const viewParam = Array.isArray(params.view) ? params.view[0] : params.view;
+  const initialView: "flat" | "grouped" = viewParam === "grouped" ? "grouped" : "flat";
+
+  // 平铺视图主查询（不变）
   const { data } = await supabase
     .from("api_drafts")
     .select("*")
@@ -23,6 +44,38 @@ export default async function ApiDesignerPage() {
     .order("created_at", { ascending: false });
 
   const drafts = (data as ApiDraft[]) ?? [];
+
+  // 分组视图：批量查相关 Requirement 的元信息（避免 N+1）。
+  // 只查 drafts 里出现的 source_requirement_id（去重 + 过滤 null），
+  // 排除软删需求（deleted_at 非空）——软删需求不展示组头（其接口自动归「未归属」）。
+  const sourceIds = Array.from(
+    new Set(
+      drafts
+        .map((d) => d.source_requirement_id)
+        .filter((id): id is string => id !== null)
+    )
+  );
+
+  let requirements: RequirementProjection[] = [];
+  if (sourceIds.length > 0) {
+    const { data: reqData } = await supabase
+      .from("requirement_drafts")
+      .select("id, title, lifecycle, priority")
+      .in("id", sourceIds)
+      .is("deleted_at", null)
+      // 排序复用 listRequirements（actions.ts）：lifecycle asc → priority asc → updated_at desc，
+      // 分组视图组顺序即与需求池一致——不在客户端重排（避免与 DB 排序逻辑分叉）。
+      .order("lifecycle", { ascending: true })
+      .order("priority", { ascending: true })
+      .order("updated_at", { ascending: false });
+    const reqs = (reqData as Pick<RequirementDraft, "id" | "title" | "lifecycle" | "priority">[] | null) ?? [];
+    requirements = reqs.map((r) => ({
+      id: r.id,
+      title: r.title,
+      lifecycle: r.lifecycle,
+      priority: r.priority,
+    }));
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -52,29 +105,14 @@ export default async function ApiDesignerPage() {
           </Link>
         </div>
       ) : (
-        <div className="space-y-3">
-          {drafts.map((d) => {
-            const meta = API_STATUS_META[d.status];
-            return (
-              <Link
-                key={d.id}
-                href={`/dashboard/api-designer/${d.id}`}
-                className="block rounded-lg border border-border bg-card p-4 transition-shadow hover:shadow-md"
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium">{d.title}</h3>
-                  <span className={`text-xs font-medium ${meta.color}`}>{meta.label}</span>
-                </div>
-                <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
-                  {d.business_requirement}
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {new Date(d.created_at).toLocaleString("zh-CN")}
-                </p>
-              </Link>
-            );
-          })}
-        </div>
+        // useSearchParams 需 Suspense 边界（next.js 硬性要求）
+        <Suspense fallback={null}>
+          <ApiDesignerList
+            drafts={drafts}
+            requirements={requirements}
+            initialView={initialView}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -12,7 +12,7 @@
  * 服务端 swagger-parser 权威校验双层分工。
  */
 
-import type { GenStatus } from "@/types/database";
+import type { GenStatus, ApiDraft, PriorityLevel, RequirementLifecycle } from "@/types/database";
 
 /** 必填错误码（每个 path 至少含这四个，验收门槛 100%） */
 export const REQUIRED_ERROR_CODES = ["400", "401", "404", "500"] as const;
@@ -253,3 +253,124 @@ export const API_STATUS_META: Record<ApiGenStatus, { label: string; color: strin
   completed: { label: "完成", color: "text-green-600" },
   failed: { label: "失败", color: "text-red-600" },
 };
+
+// ============ seam 6：按 Requirement 分组 API 草稿（07 工单）============
+
+/**
+ * Requirement 元信息投影——只取分组视图需要的字段。
+ * 故意不直接复用 RequirementDraft，避免把整个实体塞进纯函数的输入
+ * （requirements 由调用方批量查好后传入，可能来自 select 子集）。
+ *
+ * lifecycle / priority 用枚举类型而非 string：避免每个使用点都要 `as` 反复 cast
+ * （Primitive Obsession——primitive 包装了 domain concept 却丢了类型约束）。
+ */
+export interface RequirementProjection {
+  id: string;
+  title: string;
+  lifecycle: RequirementLifecycle;
+  priority: PriorityLevel;
+}
+
+/** 分组结果：有归属（按需求聚合）+ 未归属组（requirement === null，恒在最后） */
+export interface ApiDraftGroup {
+  requirement: RequirementProjection | null;
+  drafts: ApiDraft[];
+}
+
+/**
+ * 把 API 草稿按 source_requirement_id 分组。
+ * - 有 source_requirement_id 且能在 requirements 里找到对应需求的 → 归到该需求组
+ * - 没关联（null）或关联的需求不在 requirements 列表里（被软删/跨项目）→ 归「未归属」组
+ *
+ * 纯函数，不查 DB——requirements 由调用方先查好传入，避免 N+1。
+ * 分组顺序：按 requirements 传入顺序（调用方排序后传入），未归属组恒在最后。
+ * 组内 drafts 顺序保持传入顺序（页面查询时已 order by created_at desc）。
+ */
+export function groupApiDraftsByRequirement(
+  drafts: ApiDraft[],
+  requirements: RequirementProjection[]
+): ApiDraftGroup[] {
+  const reqMap = new Map(requirements.map((r) => [r.id, r]));
+  const grouped = new Map<string, ApiDraft[]>();
+  const unattached: ApiDraft[] = [];
+
+  for (const d of drafts) {
+    const rid = d.source_requirement_id;
+    if (rid && reqMap.has(rid)) {
+      const arr = grouped.get(rid) ?? [];
+      arr.push(d);
+      grouped.set(rid, arr);
+    } else {
+      unattached.push(d);
+    }
+  }
+
+  const groups: ApiDraftGroup[] = Array.from(grouped.entries()).map(
+    ([rid, ds]) => {
+      const r = reqMap.get(rid)!;
+      return {
+        requirement: {
+          id: r.id,
+          title: r.title,
+          lifecycle: r.lifecycle,
+          priority: r.priority,
+        },
+        drafts: ds,
+      };
+    }
+  );
+
+  // 未归属组恒在最后；空时不出现（避免空「未归属」组干扰 UI）
+  if (unattached.length > 0) {
+    groups.push({ requirement: null, drafts: unattached });
+  }
+  return groups;
+}
+
+// ============ seam 8：组内草稿的 origin 标签（07 工单）============
+
+/**
+ * 分组视图里单条草稿的 origin 标签文案。
+ *
+ * 三态（与 groupApiDraftsByRequirement 的分组语义对齐）：
+ * - 命名组内：组头已标需求，origin 是冗余信息——返回 null（调用方不渲染标签）
+ * - 未归属组 + source_requirement_id 为空：纯自由创建 → "自由创建"
+ * - 未归属组 + source_requirement_id 非空：关联的需求已被软删/跨项目
+ *   （groupApiDraftsByRequirement 解析不到对应需求才落到未归属组）→ "原属需求已删除"
+ *
+ * 纯函数：便于单测；UI 只负责传入 isUnattached + source_requirement_id。
+ */
+export function draftOriginLabel(
+  isUnattached: boolean,
+  source_requirement_id: string | null
+): string | null {
+  if (!isUnattached) return null;
+  return source_requirement_id === null ? "自由创建" : "原属需求已删除";
+}
+
+// ============ seam 7：从 OpenAPI 文档提取首个 path + method（07 工单）============
+
+const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
+
+/**
+ * 从已解析的 OpenAPI 文档对象中提取首个 path + 首个 method（列表分组视图用）。
+ * 纯函数：输入是已解析的 doc（不是 YAML 字符串），失败/空一律返回 null。
+ * 「首个」= Object 插入顺序的第一个（OpenAPI doc 通常单 path 单 method，多时取代表）。
+ */
+export function extractFirstPathMethod(
+  doc: unknown
+): { path: string; method: string } | null {
+  if (typeof doc !== "object" || doc === null) return null;
+  const paths = (doc as { paths?: unknown }).paths;
+  if (typeof paths !== "object" || paths === null) return null;
+
+  for (const [path, pathObj] of Object.entries(paths)) {
+    if (typeof pathObj !== "object" || pathObj === null) continue;
+    for (const method of HTTP_METHODS) {
+      if (method in (pathObj as Record<string, unknown>)) {
+        return { path, method };
+      }
+    }
+  }
+  return null;
+}
